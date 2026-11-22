@@ -16,10 +16,7 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 const sourcePath = path.resolve(__dirname, '../src/utils/anthropic-adapter.ts');
-const {
-  AnthropicStreamAdapter,
-  convertAnthropicRequestToOpenAI,
-} = require(sourcePath);
+const { AnthropicStreamAdapter, convertAnthropicRequestToOpenAI } = require(sourcePath);
 
 function parseSSE(text) {
   return text
@@ -39,9 +36,7 @@ async function transformOpenAIChunks(chunks) {
     start(controller) {
       const encoder = new TextEncoder();
       for (const chunk of chunks) {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`)
-        );
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
       }
       controller.enqueue(encoder.encode('data: [DONE]\n\n'));
       controller.close();
@@ -173,11 +168,17 @@ test('Anthropic stream adapter keeps interleaved parallel tool arguments separat
     .map((item) => item.data.delta)
     .filter((delta) => delta.type === 'input_json_delta');
 
-  assert.deepEqual(starts.map((block) => [block.id, block.name]), [
-    ['call-a', 'tool_a'],
-    ['call-b', 'tool_b'],
-  ]);
-  assert.deepEqual(deltas.map((delta) => delta.partial_json), ['{"a":1}', '{"b":2}']);
+  assert.deepEqual(
+    starts.map((block) => [block.id, block.name]),
+    [
+      ['call-a', 'tool_a'],
+      ['call-b', 'tool_b'],
+    ]
+  );
+  assert.deepEqual(
+    deltas.map((delta) => delta.partial_json),
+    ['{"a":1}', '{"b":2}']
+  );
   assert.equal(
     events.find((item) => item.event === 'message_delta').data.delta.stop_reason,
     'tool_use'
