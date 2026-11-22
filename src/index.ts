@@ -483,6 +483,59 @@ function validateAnthropicRequest(value: unknown): AnthropicRequest {
       'invalid_request'
     );
   }
+
+  for (let index = 0; index < body.messages.length; index++) {
+    const message = body.messages[index];
+    if (!message || typeof message !== 'object' || Array.isArray(message)) {
+      throw new ProxyError(`Invalid Anthropic message at index ${index}`, 400, 'invalid_request');
+    }
+    const record = message as Record<string, unknown>;
+    if (record.role !== 'user' && record.role !== 'assistant') {
+      throw new ProxyError(
+        `Anthropic message at index ${index} must have role user or assistant.`,
+        400,
+        'invalid_request'
+      );
+    }
+    if (typeof record.content !== 'string' && !Array.isArray(record.content)) {
+      throw new ProxyError(
+        `Anthropic message at index ${index} requires string or block-array content.`,
+        400,
+        'invalid_request'
+      );
+    }
+    if (
+      Array.isArray(record.content) &&
+      !record.content.every((block) => block && typeof block === 'object' && !Array.isArray(block))
+    ) {
+      throw new ProxyError(
+        `Anthropic message at index ${index} contains an invalid content block.`,
+        400,
+        'invalid_request'
+      );
+    }
+  }
+
+  if (body.system !== undefined) {
+    const validSystem =
+      typeof body.system === 'string' ||
+      (Array.isArray(body.system) &&
+        body.system.every(
+          (block) =>
+            block &&
+            typeof block === 'object' &&
+            (block as Record<string, unknown>).type === 'text' &&
+            typeof (block as Record<string, unknown>).text === 'string'
+        ));
+    if (!validSystem) {
+      throw new ProxyError(
+        'Anthropic system must be a string or an array of text blocks.',
+        400,
+        'invalid_request'
+      );
+    }
+  }
+
   if (
     body.max_tokens !== undefined &&
     (typeof body.max_tokens !== 'number' ||
@@ -493,6 +546,88 @@ function validateAnthropicRequest(value: unknown): AnthropicRequest {
   }
   if (body.stream !== undefined && typeof body.stream !== 'boolean') {
     throw new ProxyError('stream must be a boolean', 400, 'invalid_request');
+  }
+
+  for (const field of ['temperature', 'top_p', 'top_k'] as const) {
+    const fieldValue = body[field];
+    if (
+      fieldValue !== undefined &&
+      (typeof fieldValue !== 'number' || !Number.isFinite(fieldValue))
+    ) {
+      throw new ProxyError(
+        `Anthropic ${field} must be a finite number.`,
+        400,
+        'invalid_request'
+      );
+    }
+  }
+  if (
+    body.stop_sequences !== undefined &&
+    (!Array.isArray(body.stop_sequences) ||
+      !body.stop_sequences.every((sequence) => typeof sequence === 'string'))
+  ) {
+    throw new ProxyError(
+      'Anthropic stop_sequences must be an array of strings.',
+      400,
+      'invalid_request'
+    );
+  }
+  if (body.metadata !== undefined) {
+    if (
+      !body.metadata ||
+      typeof body.metadata !== 'object' ||
+      Array.isArray(body.metadata) ||
+      !Object.values(body.metadata as Record<string, unknown>).every(
+        (item) => typeof item === 'string'
+      )
+    ) {
+      throw new ProxyError('Anthropic metadata must be an object of string values.', 400, 'invalid_request');
+    }
+  }
+  if (body.tools !== undefined) {
+    if (!Array.isArray(body.tools)) {
+      throw new ProxyError('Anthropic tools must be an array.', 400, 'invalid_request');
+    }
+    for (let index = 0; index < body.tools.length; index++) {
+      const tool = body.tools[index] as Record<string, unknown> | null;
+      if (
+        !tool ||
+        typeof tool !== 'object' ||
+        typeof tool.name !== 'string' ||
+        !tool.name ||
+        !tool.input_schema ||
+        typeof tool.input_schema !== 'object' ||
+        Array.isArray(tool.input_schema)
+      ) {
+        throw new ProxyError(`Invalid Anthropic tool at index ${index}.`, 400, 'invalid_request');
+      }
+    }
+  }
+  if (body.tool_choice !== undefined) {
+    const choice = body.tool_choice as Record<string, unknown> | null;
+    if (
+      !choice ||
+      typeof choice !== 'object' ||
+      !['auto', 'any', 'tool'].includes(String(choice.type)) ||
+      (choice.type === 'tool' &&
+        (typeof choice.name !== 'string' || !choice.name))
+    ) {
+      throw new ProxyError('Anthropic tool_choice has an invalid value.', 400, 'invalid_request');
+    }
+  }
+  if (body.thinking !== undefined) {
+    const thinking = body.thinking as Record<string, unknown> | null;
+    if (
+      !thinking ||
+      typeof thinking !== 'object' ||
+      (thinking.type === 'enabled' &&
+        (typeof thinking.budget_tokens !== 'number' ||
+          !Number.isInteger(thinking.budget_tokens) ||
+          thinking.budget_tokens < 1)) ||
+      !['enabled', 'disabled'].includes(String(thinking.type))
+    ) {
+      throw new ProxyError('Anthropic thinking configuration is invalid.', 400, 'invalid_request');
+    }
   }
 
   return body as unknown as AnthropicRequest;
