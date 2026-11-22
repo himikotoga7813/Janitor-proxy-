@@ -129,10 +129,10 @@ export class CloudflareAIProvider extends BaseProvider {
 
       const processEvent = async (event: string): Promise<void> => {
         const data = event
-          .split(/\\r?\\n/)
+          .split(/\r?\n/)
           .filter((line) => line.startsWith('data:'))
           .map((line) => line.slice(5).trimStart())
-          .join('\\n');
+          .join('\n');
         if (!data || data.trim() === '[DONE]') return;
 
         try {
@@ -145,7 +145,7 @@ export class CloudflareAIProvider extends BaseProvider {
 
       const drainSse = async (flush = false): Promise<void> => {
         let boundary: RegExpExecArray | null;
-        const separator = /\\r?\\n\\r?\\n/;
+        const separator = /\r?\n\r?\n/;
         while ((boundary = separator.exec(pending)) !== null) {
           const event = pending.slice(0, boundary.index);
           pending = pending.slice(boundary.index + boundary[0].length);
@@ -173,7 +173,7 @@ export class CloudflareAIProvider extends BaseProvider {
           if (done) break;
 
           if (typeof value === 'string') {
-            if (value.startsWith('data:') || value.includes('\\n\\ndata:')) {
+            if (value.startsWith('data:') || value.includes('\n\ndata:')) {
               pending += value;
               await drainSse();
             } else if (value && !sawSse) {
