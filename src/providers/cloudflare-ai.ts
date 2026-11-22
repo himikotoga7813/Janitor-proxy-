@@ -50,9 +50,9 @@ export class CloudflareAIProvider extends BaseProvider {
       }
 
       if (request.stream) {
-        return this.handleStream(params);
+        return await this.handleStream(params);
       }
-      return this.handleNonStream(params);
+      return await this.handleNonStream(params);
     } catch (error) {
       return this.handleError(error, 'CloudflareAIProvider');
     }
