@@ -65,14 +65,15 @@ export class StreamSession {
 
   chunk(
     delta: StreamDelta,
-    finishReason: 'stop' | 'length' | 'tool_calls' | null = null
+    finishReason: 'stop' | 'length' | 'tool_calls' | null = null,
+    choiceIndex = 0
   ): Uint8Array {
     const payload = {
       id: this.id,
       object: 'chat.completion.chunk',
       created: this.created,
       model: this.model,
-      choices: [{ index: 0, delta, finish_reason: finishReason }],
+      choices: [{ index: choiceIndex, delta, finish_reason: finishReason }],
     };
     return this.encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
   }
@@ -81,11 +82,16 @@ export class StreamSession {
     return this.chunk({ role: 'assistant', content: '' });
   }
 
-  textChunk(text: string): Uint8Array {
-    return this.chunk({ content: text });
+  textChunk(text: string, choiceIndex = 0): Uint8Array {
+    return this.chunk({ content: text }, null, choiceIndex);
   }
 
-  toolCallStartChunk(index: number, callId: string, functionName: string): Uint8Array {
+  toolCallStartChunk(
+    index: number,
+    callId: string,
+    functionName: string,
+    choiceIndex = 0
+  ): Uint8Array {
     return this.chunk({
       tool_calls: [
         {
@@ -95,17 +101,22 @@ export class StreamSession {
           function: { name: functionName, arguments: '' },
         },
       ],
-    });
+    }, null, choiceIndex);
   }
 
-  toolCallArgsChunk(index: number, args: string): Uint8Array {
-    return this.chunk({
-      tool_calls: [{ index, function: { arguments: args } }],
-    });
+  toolCallArgsChunk(index: number, args: string, choiceIndex = 0): Uint8Array {
+    return this.chunk(
+      { tool_calls: [{ index, function: { arguments: args } }] },
+      null,
+      choiceIndex
+    );
   }
 
-  finishChunk(reason: 'stop' | 'tool_calls' | 'length' = 'stop'): Uint8Array {
-    return this.chunk({}, reason);
+  finishChunk(
+    reason: 'stop' | 'tool_calls' | 'length' = 'stop',
+    choiceIndex = 0
+  ): Uint8Array {
+    return this.chunk({}, reason, choiceIndex);
   }
 
   done(): Uint8Array {
