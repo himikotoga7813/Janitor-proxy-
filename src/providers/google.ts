@@ -300,7 +300,7 @@ export class GoogleProvider extends BaseProvider {
     }
 
     for (const msg of messages) {
-      if (msg.role === 'system') {
+      if (msg.role === 'system' || msg.role === 'developer') {
         const text =
           typeof msg.content === 'string'
             ? msg.content
@@ -392,8 +392,11 @@ export class GoogleProvider extends BaseProvider {
         }
 
         if (parts.length > 0) contents.push({ role: 'model', parts });
-      } else if (msg.role === 'tool') {
-        const functionName = toolCallNameMap.get(msg.tool_call_id || '');
+      } else if (msg.role === 'tool' || msg.role === 'function') {
+        const functionName =
+          msg.role === 'function'
+            ? msg.name
+            : toolCallNameMap.get(msg.tool_call_id || '');
         const toolContent =
           typeof msg.content === 'string'
             ? msg.content || ''
