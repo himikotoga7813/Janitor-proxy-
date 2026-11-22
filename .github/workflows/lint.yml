@@ -13,7 +13,7 @@ on:
 
 jobs:
   lint:
-    name: Lint and Type Check
+    name: Lint, Type Check, Tests and Audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,11 +27,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run ESLint
-        run: npm run lint
-
-      - name: Run type check
-        run: npm run type-check
-
-      - name: Check formatting
-        run: npx prettier --check "src/**/*.ts"
+      - name: Run complete verification
+        run: npm run check
