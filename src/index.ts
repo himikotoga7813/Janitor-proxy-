@@ -6,6 +6,7 @@ import {
   createErrorResponse,
   getProviderTimeoutMs,
   withTimeout,
+  isRetryableError,
 } from './utils/error-handler';
 import { createProvider } from './providers';
 import { AnthropicProvider } from './providers/anthropic';
@@ -205,6 +206,7 @@ async function handleAnthropicNativePath(
           typeof (error as { statusCode?: unknown }).statusCode === 'number'
             ? (error as { statusCode: number }).statusCode
             : 502;
+        if (!isRetryableError(error) && ![401, 403].includes(lastStatusCode)) break;
       }
     }
   }
