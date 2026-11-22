@@ -30,13 +30,11 @@ export function extractReasoningText(...values: unknown[]): string {
       visit(record.thinking, depth + 1);
       return;
     }
-    if (typeof record.summary === 'string') {
+    if (record.summary !== undefined) {
       visit(record.summary, depth + 1);
       return;
     }
-    if (typeof record.content === 'string') {
-      visit(record.content, depth + 1);
-    }
+    if (record.content !== undefined) visit(record.content, depth + 1);
   };
 
   for (const value of values) visit(value, 0);
