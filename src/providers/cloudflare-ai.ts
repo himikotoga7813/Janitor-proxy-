@@ -111,8 +111,11 @@ export class CloudflareAIProvider extends BaseProvider {
     const writer = writable.getWriter();
     const session = new StreamSession(this.model);
     const formatters = new Map<number, ReasoningStreamFormatter>();
-    const startedToolCalls = new Set<number>();
-    const toolCallIds = new Map<number, string>();
+    const startedToolCalls = new Set<string>();
+    const toolCallIds = new Map<string, string>();
+    const startedChoices = new Set<number>([0]);
+    const finishReasons = new Map<number, 'stop' | 'tool_calls' | 'length'>();
+    const toolCallChoices = new Set<number>();
     let nativeToolIndex = 0;
 
     const formatterFor = (index: number): ReasoningStreamFormatter => {
@@ -127,6 +130,14 @@ export class CloudflareAIProvider extends BaseProvider {
     (async () => {
       let hasToolCalls = false;
       const decoder = new TextDecoder();
+
+      const ensureChoiceStarted = async (choiceIndex: number): Promise<void> => {
+        if (startedChoices.has(choiceIndex)) return;
+        startedChoices.add(choiceIndex);
+        await writer.write(
+          session.chunk({ role: 'assistant', content: '' }, null, choiceIndex)
+        );
+      };
       let pending = '';
       let sawSse = false;
 
@@ -173,15 +184,31 @@ export class CloudflareAIProvider extends BaseProvider {
               delta.reasoning_details
             );
             if (reasoning) {
-              await writer.write(session.textChunk(formatter.pushReasoning(reasoning)));
+              await ensureChoiceStarted(index);
+              await writer.write(
+                session.textChunk(formatter.pushReasoning(reasoning), index)
+              );
             }
             if (typeof delta.content === 'string' && delta.content.length > 0) {
-              await writer.write(session.textChunk(formatter.pushContent(delta.content)));
+              await ensureChoiceStarted(index);
+              await writer.write(
+                session.textChunk(formatter.pushContent(delta.content), index)
+              );
             }
 
             if (choice?.finish_reason) {
+              const finishReason =
+                choice.finish_reason === 'tool_calls'
+                  ? 'tool_calls'
+                  : choice.finish_reason === 'length'
+                    ? 'length'
+                    : 'stop';
+              finishReasons.set(index, finishReason);
               const closing = formatter.finish();
-              if (closing) await writer.write(session.textChunk(closing));
+              if (closing) {
+                await ensureChoiceStarted(index);
+                await writer.write(session.textChunk(closing, index));
+              }
             }
 
             const calls = delta.tool_calls;
@@ -285,12 +312,26 @@ export class CloudflareAIProvider extends BaseProvider {
         pending += decoder.decode();
         await drainSse(true);
 
-        for (const formatter of formatters.values()) {
-          const closing = formatter.finish();
-          if (closing) await writer.write(session.textChunk(closing));
+        const choiceIndices = new Set<number>([
+          0,
+          ...formatters.keys(),
+          ...finishReasons.keys(),
+          ...toolCallChoices,
+        ]);
+        for (const choiceIndex of choiceIndices) {
+          const closing = formatterFor(choiceIndex).finish();
+          if (closing) {
+            await ensureChoiceStarted(choiceIndex);
+            await writer.write(session.textChunk(closing, choiceIndex));
+          }
+          const finishReason =
+            finishReasons.get(choiceIndex) ||
+            (toolCallChoices.has(choiceIndex) ||
+            (choiceIndex === 0 && hasToolCalls)
+              ? 'tool_calls'
+              : 'stop');
+          await writer.write(session.finishChunk(finishReason, choiceIndex));
         }
-
-        await writer.write(session.finishChunk(hasToolCalls ? 'tool_calls' : 'stop'));
         await writer.write(session.done());
       } catch (error) {
         console.error('[CloudflareAIProvider] Stream error:', error);
