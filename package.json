@@ -51,13 +51,13 @@
   "author": "noname",
   "license": "MIT",
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260526.1",
+    "@cloudflare/workers-types": "^5.20261121.1",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.57.1",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
-    "wrangler": "^4.95.0"
+    "wrangler": "^4.166.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
