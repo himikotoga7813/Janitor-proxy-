@@ -10,9 +10,7 @@ compatibility_date = "2024-01-01"
 binding = "AI"
 
 [vars]
-# Proxy authentication token
-PROXY_AUTH_TOKEN = "your-secret-proxy-token-here"
-
+# Keep PROXY_AUTH_TOKEN and provider API keys in Wrangler Secrets; do not put them in [vars].
 # Model routing configuration
 # Note: Model names are now used for routing instead of URL paths
 ROUTES_CONFIG = '''
