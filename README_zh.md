@@ -1,4 +1,4 @@
-# 🚀 AI Worker Proxy: 一个 API 接入所有 AI 模型（免费且 100% 在线）
+# 🚀 AI Worker Proxy：通过统一 API 接入多个 AI 供应商
 
 [![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy-Cloudflare%20Workers-orange?logo=cloudflare)](https://workers.cloudflare.com/)
 [![OpenAI Compatible](https://img.shields.io/badge/OpenAI-Compatible-green)](https://openai.com/)
@@ -6,17 +6,17 @@
 
 厌倦了 AI API Key 额度用完或被限速？想让只支持 OpenAI SDK 的应用也能使用 Claude 或 Gemini？
 
-这是一个运行在 Cloudflare Workers 上的 **免费 AI 网关**。它充当中间人：你传入 OpenAI 格式的请求，它会将请求路由到 **ChatGPT、Claude、Gemini 甚至免费本地模型**，并自动轮换你的 API Key 以避免限速。
+这是一个运行在 Cloudflare Workers 上的 AI 网关。你可以传入 OpenAI 格式的请求，由它路由到已配置的 OpenAI 兼容接口、Anthropic、Gemini 或 Workers AI。代理可以按配置尝试备用凭据和供应商，但仍受上游模型的配额、上下文长度、账户状态及计费规则限制。
 
-- **💰 费用：** ¥0（运行在 Cloudflare 免费计划 - 每天 10 万次请求）。
+- **💰 费用：** 取决于 Cloudflare 套餐和上游 AI 供应商；API 调用可能产生费用。
 - **⚡ 部署时间：** 5 分钟。无需写代码。
 
 ---
 
 ## 🔥 为什么需要它
 
-- **100% 在线（故障转移）：** 如果 OpenAI 挂了，它立即切换到 Claude 或 Gemini。你的应用永不停机。
-- **Key 轮换：** 放入 5 个不同的 API Key，它会逐个使用。告别限速。
+- **供应商故障转移：** 配置的供应商失败时，代理可以尝试下一个供应商，但不保证 100% 可用。
+- **凭据轮换：** 对符合条件的认证或临时错误，代理可以按顺序尝试不同的凭据；这不会绕过上游配额或速率限制。
 - **一个 API 统治所有：** 用同一套代码调用 Anthropic Claude、Google Gemini 和 GPT-4o。
 - **隐式配置：** 通过 GitHub Variable 修改路由逻辑，无需触碰代码。
 
@@ -319,7 +319,7 @@ curl -N -X POST https://ai-proxy.YOUR-USERNAME.workers.dev/anthropic/v1/messages
 ## 💬 支持
 
 发现 Bug？需要帮助？
-在 [GitHub Issues](https://github.com/zxcloli666/AI-Worker-Proxy/issues) 中提交 issue。
+在 [GitHub Issues](https://github.com/himikotoga7813/Janitor-proxy-/issues) 中提交 issue。
 
 ### ⭐ 如果这个项目为你省了钱或时间，请在仓库点个 Star！非常感谢！
 
