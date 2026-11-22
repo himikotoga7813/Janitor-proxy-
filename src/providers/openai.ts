@@ -79,7 +79,6 @@ export class OpenAIProvider extends BaseProvider {
               delta.reasoning_content,
               delta.reasoning,
               delta.thinking,
-              delta.reasoning_details,
               delta.reasoning_details
             );
             const nextDelta: Record<string, unknown> = { ...delta };
