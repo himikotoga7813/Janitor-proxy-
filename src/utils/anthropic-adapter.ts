@@ -1,4 +1,5 @@
 import { AnthropicRequest, AnthropicResponse, AnthropicContentBlock } from '../anthropic-types';
+import { ProxyError } from './error-handler';
 import {
   OpenAIChatRequest,
   OpenAIChatResponse,
@@ -26,7 +27,14 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
     for (const block of msg.content) {
       if (block.type === 'text' && block.text) {
         contentParts.push({ type: 'text', text: block.text });
-      } else if (block.type === 'image' && block.source) {
+      } else if (block.type === 'image') {
+        if (!block.source || !block.source.data || !block.source.media_type) {
+          throw new ProxyError(
+            'Anthropic image block is missing a valid base64 source.',
+            400,
+            'invalid_image_block'
+          );
+        }
         contentParts.push({
           type: 'image_url',
           image_url: {
@@ -39,8 +47,16 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
             ? block.content
             : block.content
               ? block.content
-                  .filter((part) => part.type === 'text')
-                  .map((part) => part.text || '')
+                  .map((part) => {
+                    if (part.type !== 'text') {
+                      throw new ProxyError(
+                        'Anthropic tool_result blocks with non-text content cannot be converted to OpenAI tool messages.',
+                        501,
+                        'unsupported_tool_result_content'
+                      );
+                    }
+                    return part.text || '';
+                  })
                   .join(' ')
               : '';
         if (block.tool_use_id) {
@@ -52,15 +68,28 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
         } else {
           contentParts.push({ type: 'text', text: toolContent });
         }
-      } else if (block.type === 'tool_use' && block.name) {
+      } else if (block.type === 'tool_use') {
+        if (!block.id || !block.name) {
+          throw new ProxyError(
+            'Anthropic tool_use blocks require both an id and a name.',
+            400,
+            'invalid_tool_use'
+          );
+        }
         toolCalls.push({
-          id: block.id || '',
+          id: block.id,
           type: 'function',
           function: {
             name: block.name,
             arguments: JSON.stringify(block.input ?? {}),
           },
         });
+      } else {
+        throw new ProxyError(
+          `Anthropic content block type "${String(block.type)}" cannot be converted to OpenAI chat format.`,
+          501,
+          'unsupported_content_block'
+        );
       }
     }
 
