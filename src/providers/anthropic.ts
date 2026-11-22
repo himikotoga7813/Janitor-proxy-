@@ -16,7 +16,31 @@ export class AnthropicProvider extends BaseProvider {
           'unsupported_candidate_count'
         );
       }
-      const clientOpts: Record<string, unknown> = { apiKey };
+            const unsupportedOptions = [
+        'frequency_penalty',
+        'presence_penalty',
+        'response_format',
+        'seed',
+        'logprobs',
+        'top_logprobs',
+        'parallel_tool_calls',
+        'stream_options',
+        'reasoning_effort',
+        'verbosity',
+        'user',
+      ] as const;
+      const unsupportedOption = unsupportedOptions.find(
+        (key) => request[key] !== undefined
+      );
+      if (unsupportedOption) {
+        throw new ProxyError(
+          `Anthropic provider does not support the "${unsupportedOption}" chat option.`,
+          501,
+          'unsupported_request_option'
+        );
+      }
+
+const clientOpts: Record<string, unknown> = { apiKey };
       if (this.baseUrl) clientOpts.baseURL = this.baseUrl;
       const client = new Anthropic(clientOpts);
 
@@ -43,10 +67,8 @@ export class AnthropicProvider extends BaseProvider {
         params.stop_sequences = Array.isArray(request.stop) ? request.stop : [request.stop];
       }
 
-      if (request.tool_choice) {
-        if (request.tool_choice === 'none') {
-          params.tool_choice = { type: 'none' };
-        } else if (request.tool_choice === 'auto' || request.tool_choice === 'required') {
+      if (request.tool_choice && request.tool_choice !== 'none') {
+        if (request.tool_choice === 'auto' || request.tool_choice === 'required') {
           params.tool_choice =
             request.tool_choice === 'required' ? { type: 'any' } : { type: 'auto' };
         } else if (
