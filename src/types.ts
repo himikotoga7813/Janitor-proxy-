@@ -60,6 +60,7 @@ export interface OpenAIChatRequest {
   messages: OpenAIMessage[];
   temperature?: number;
   max_tokens?: number;
+  max_completion_tokens?: number;
   stream?: boolean;
   tools?: Tool[];
   tool_choice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
