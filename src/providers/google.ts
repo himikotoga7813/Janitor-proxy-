@@ -56,6 +56,13 @@ export class GoogleProvider extends BaseProvider {
 
   async chat(request: OpenAIChatRequest, apiKey: string): Promise<ProviderResponse> {
     try {
+      if (request.n !== undefined && request.n > 1) {
+        throw new ProxyError(
+          'Google provider currently supports one candidate per request; the router may fall back to another configured provider.',
+          501,
+          'unsupported_candidate_count'
+        );
+      }
       const ai = new GoogleGenAI({ apiKey });
 
       const { systemInstruction, contents } = this.convertMessages(request.messages);
@@ -111,9 +118,9 @@ export class GoogleProvider extends BaseProvider {
       }
 
       if (request.stream) {
-        return this.handleStream(ai, contents, config);
+        return await this.handleStream(ai, contents, config);
       }
-      return this.handleNonStream(ai, contents, config);
+      return await this.handleNonStream(ai, contents, config);
     } catch (error) {
       return this.handleError(error, 'GoogleProvider');
     }
