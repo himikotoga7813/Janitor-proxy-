@@ -4,6 +4,7 @@ import { Router } from './router';
 import {
   ProxyError,
   createErrorResponse,
+  getErrorStatusCode,
   getProviderTimeoutMs,
   withTimeout,
   isRetryableError,
@@ -200,13 +201,7 @@ async function handleAnthropicNativePath(
         return json(result.rawResponse);
       } catch (error) {
         lastError = error;
-        lastStatusCode =
-          error &&
-          typeof error === 'object' &&
-          'statusCode' in error &&
-          typeof (error as { statusCode?: unknown }).statusCode === 'number'
-            ? (error as { statusCode: number }).statusCode
-            : 502;
+        lastStatusCode = getErrorStatusCode(error) || 502;
         if (!isRetryableError(error) && ![401, 403].includes(lastStatusCode)) break;
       }
     }
