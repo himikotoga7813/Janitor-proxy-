@@ -374,9 +374,7 @@ const messages = this.convertMessages(request.messages);
           }
           const finishReason =
             finishReasons.get(choiceIndex) ||
-            (toolCallChoices.has(choiceIndex) ||
-            ? 'tool_calls'
-            : 'stop');
+            (toolCallChoices.has(choiceIndex) ? 'tool_calls' : 'stop');
           await writer.write(session.finishChunk(finishReason, choiceIndex));
         }
         await writer.write(session.done());
