@@ -222,12 +222,15 @@ export function convertOpenAIResponseToAnthropic(
 export class AnthropicStreamAdapter {
   private encoder = new TextEncoder();
   private blockIndex = 0;
-  private activeBlockIndex = 0;
+  private activeTextBlockIndex: number | null = null;
   private started = false;
-  private textBlockActive = false;
-  private toolBlockActive = false;
   private finished = false;
+  private inputTokens = 0;
   private outputTokens = 0;
+  private toolCalls = new Map<
+    number,
+    { id: string; name: string; arguments: string }
+  >();
 
   constructor(
     private model: string,
@@ -238,7 +241,7 @@ export class AnthropicStreamAdapter {
     return this.encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   }
 
-  private startMessage(controller: TransformStreamDefaultController): void {
+  private startMessage(controller: TransformStreamDefaultController<Uint8Array>): void {
     if (this.started) return;
     this.started = true;
     controller.enqueue(
@@ -252,47 +255,96 @@ export class AnthropicStreamAdapter {
           model: this.model,
           stop_reason: null,
           stop_sequence: null,
-          usage: { input_tokens: 0, output_tokens: 0 },
+          usage: { input_tokens: this.inputTokens, output_tokens: 0 },
         },
       })
     );
   }
 
-  private startTextBlock(controller: TransformStreamDefaultController): void {
-    this.activeBlockIndex = this.blockIndex++;
-    this.textBlockActive = true;
+  private startTextBlock(
+    controller: TransformStreamDefaultController<Uint8Array>
+  ): void {
+    if (this.activeTextBlockIndex !== null) return;
+    const index = this.blockIndex++;
+    this.activeTextBlockIndex = index;
     controller.enqueue(
       this.encodeSSE('content_block_start', {
         type: 'content_block_start',
-        index: this.activeBlockIndex,
+        index,
         content_block: { type: 'text', text: '' },
       })
     );
   }
 
-  private stopActiveBlock(controller: TransformStreamDefaultController): void {
-    if (!this.textBlockActive && !this.toolBlockActive) return;
+  private stopTextBlock(
+    controller: TransformStreamDefaultController<Uint8Array>
+  ): void {
+    if (this.activeTextBlockIndex === null) return;
     controller.enqueue(
       this.encodeSSE('content_block_stop', {
         type: 'content_block_stop',
-        index: this.activeBlockIndex,
+        index: this.activeTextBlockIndex,
       })
     );
-    this.textBlockActive = false;
-    this.toolBlockActive = false;
+    this.activeTextBlockIndex = null;
+  }
+
+  /**
+   * Tool-call deltas may be interleaved in one OpenAI chunk.
+   * Buffer by provider tool index so arguments never leak into another tool block.
+   */
+  private emitToolBlocks(
+    controller: TransformStreamDefaultController<Uint8Array>
+  ): void {
+    const orderedTools = [...this.toolCalls.entries()].sort(([left], [right]) => left - right);
+    for (const [, tool] of orderedTools) {
+      const index = this.blockIndex++;
+      controller.enqueue(
+        this.encodeSSE('content_block_start', {
+          type: 'content_block_start',
+          index,
+          content_block: {
+            type: 'tool_use',
+            id: tool.id,
+            name: tool.name,
+            input: {},
+          },
+        })
+      );
+
+      if (tool.arguments) {
+        controller.enqueue(
+          this.encodeSSE('content_block_delta', {
+            type: 'content_block_delta',
+            index,
+            delta: { type: 'input_json_delta', partial_json: tool.arguments },
+          })
+        );
+      }
+
+      controller.enqueue(
+        this.encodeSSE('content_block_stop', {
+          type: 'content_block_stop',
+          index,
+        })
+      );
+    }
   }
 
   private finishMessage(
-    controller: TransformStreamDefaultController,
+    controller: TransformStreamDefaultController<Uint8Array>,
     reason: 'end_turn' | 'max_tokens' | 'tool_use' | null
   ): void {
     if (this.finished) return;
     this.startMessage(controller);
-    this.stopActiveBlock(controller);
+    this.stopTextBlock(controller);
+    this.emitToolBlocks(controller);
+
+    const stopReason = this.toolCalls.size > 0 ? 'tool_use' : reason || 'end_turn';
     controller.enqueue(
       this.encodeSSE('message_delta', {
         type: 'message_delta',
-        delta: { stop_reason: reason || 'end_turn', stop_sequence: null },
+        delta: { stop_reason: stopReason, stop_sequence: null },
         usage: { output_tokens: this.outputTokens },
       })
     );
@@ -302,7 +354,6 @@ export class AnthropicStreamAdapter {
 
   createTransformStream(): TransformStream<Uint8Array, Uint8Array> {
     let lineBuffer = '';
-    let toolIndex = -1;
     const decoder = new TextDecoder();
 
     return new TransformStream({
@@ -311,14 +362,11 @@ export class AnthropicStreamAdapter {
         const lines = text.split(/\r?\n/);
         lineBuffer = lines.pop() || '';
 
-        for (const line of lines) {
-          toolIndex = this.processSSELine(line, controller, toolIndex);
-        }
+        for (const line of lines) this.processSSELine(line, controller);
       },
       flush: (controller) => {
-        const tail = decoder.decode();
-        const remaining = lineBuffer + tail;
-        if (remaining) this.processSSELine(remaining, controller, toolIndex);
+        const remaining = lineBuffer + decoder.decode();
+        if (remaining) this.processSSELine(remaining, controller);
         if (!this.finished) this.finishMessage(controller, 'end_turn');
         lineBuffer = '';
       },
@@ -327,18 +375,17 @@ export class AnthropicStreamAdapter {
 
   private processSSELine(
     line: string,
-    controller: TransformStreamDefaultController,
-    toolIndex: number
-  ): number {
-    if (!line.startsWith('data:')) return toolIndex;
+    controller: TransformStreamDefaultController<Uint8Array>
+  ): void {
+    if (!line.startsWith('data:')) return;
     const payload = line.slice(5).trim();
-    if (!payload || payload === '[DONE]') return toolIndex;
+    if (!payload || payload === '[DONE]') return;
 
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(payload) as Record<string, unknown>;
     } catch {
-      return toolIndex;
+      return;
     }
 
     if (parsed.error && typeof parsed.error === 'object') {
@@ -350,17 +397,20 @@ export class AnthropicStreamAdapter {
         })
       );
       this.finished = true;
-      return toolIndex;
+      return;
     }
 
     const usage = parsed.usage as Record<string, unknown> | undefined;
-    if (usage && typeof usage.completion_tokens === 'number') {
-      this.outputTokens = usage.completion_tokens;
+    if (usage) {
+      if (typeof usage.prompt_tokens === 'number') this.inputTokens = usage.prompt_tokens;
+      if (typeof usage.completion_tokens === 'number') {
+        this.outputTokens = usage.completion_tokens;
+      }
     }
 
     const choices = parsed.choices;
     const choice = Array.isArray(choices) ? choices[0] : undefined;
-    if (!choice || typeof choice !== 'object') return toolIndex;
+    if (!choice || typeof choice !== 'object') return;
 
     const choiceRecord = choice as Record<string, unknown>;
     const delta = (choiceRecord.delta || {}) as Record<string, unknown>;
@@ -369,11 +419,11 @@ export class AnthropicStreamAdapter {
     this.startMessage(controller);
 
     if (typeof delta.content === 'string' && delta.content.length > 0) {
-      if (!this.textBlockActive && !this.toolBlockActive) this.startTextBlock(controller);
+      this.startTextBlock(controller);
       controller.enqueue(
         this.encodeSSE('content_block_delta', {
           type: 'content_block_delta',
-          index: this.activeBlockIndex,
+          index: this.activeTextBlockIndex,
           delta: { type: 'text_delta', text: delta.content },
         })
       );
@@ -384,35 +434,15 @@ export class AnthropicStreamAdapter {
         if (!item || typeof item !== 'object') continue;
         const toolCall = item as Record<string, unknown>;
         const fn = (toolCall.function || {}) as Record<string, unknown>;
+        const index = Number.isInteger(toolCall.index) ? Number(toolCall.index) : 0;
+        const tool = this.toolCalls.get(index) || { id: '', name: '', arguments: '' };
 
-        if (toolCall.id) {
-          this.stopActiveBlock(controller);
-          toolIndex++;
-          this.activeBlockIndex = this.blockIndex++;
-          this.toolBlockActive = true;
-          controller.enqueue(
-            this.encodeSSE('content_block_start', {
-              type: 'content_block_start',
-              index: this.activeBlockIndex,
-              content_block: {
-                type: 'tool_use',
-                id: toolCall.id,
-                name: typeof fn.name === 'string' ? fn.name : '',
-                input: {},
-              },
-            })
-          );
+        if (typeof toolCall.id === 'string' && toolCall.id.length > 0) {
+          tool.id = toolCall.id;
         }
-
-        if (typeof fn.arguments === 'string' && this.toolBlockActive) {
-          controller.enqueue(
-            this.encodeSSE('content_block_delta', {
-              type: 'content_block_delta',
-              index: this.activeBlockIndex,
-              delta: { type: 'input_json_delta', partial_json: fn.arguments },
-            })
-          );
-        }
+        if (typeof fn.name === 'string') tool.name += fn.name;
+        if (typeof fn.arguments === 'string') tool.arguments += fn.arguments;
+        this.toolCalls.set(index, tool);
       }
     }
 
@@ -420,7 +450,5 @@ export class AnthropicStreamAdapter {
       const stopReason = mapFinishReason(finishReason);
       this.finishMessage(controller, stopReason);
     }
-
-    return toolIndex;
   }
 }
