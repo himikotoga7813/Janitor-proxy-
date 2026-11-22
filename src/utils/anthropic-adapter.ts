@@ -9,10 +9,74 @@ import {
 } from '../types';
 
 /** Convert an Anthropic request into the common OpenAI-compatible request format. */
+function convertAnthropicImage(block: AnthropicContentBlock): ContentPart {
+  const source = block.source;
+  if (!source) {
+    throw new ProxyError('Anthropic image block is missing its source.', 400, 'invalid_image_block');
+  }
+
+  if (source.type === 'base64') {
+    if (!source.data || !source.media_type) {
+      throw new ProxyError('Anthropic base64 image source is incomplete.', 400, 'invalid_image_block');
+    }
+    return {
+      type: 'image_url',
+      image_url: {
+        url: `data:${source.media_type};base64,${source.data}`,
+      },
+    };
+  }
+
+  if (source.type === 'url') {
+    if (!source.url) {
+      throw new ProxyError('Anthropic URL image source is empty.', 400, 'invalid_image_block');
+    }
+    return {
+      type: 'image_url',
+      image_url: { url: source.url },
+    };
+  }
+
+  throw new ProxyError('Unsupported Anthropic image source type.', 501, 'unsupported_image_source');
+}
+
+function convertAnthropicToolResult(
+  value: string | AnthropicContentBlock[] | undefined
+): OpenAIMessage['content'] {
+  if (typeof value === 'string') return value;
+  if (!value) return '';
+
+  const parts: ContentPart[] = [];
+  for (const block of value) {
+    if (block.type === 'text') {
+      if (typeof block.text !== 'string') {
+        throw new ProxyError('Anthropic tool result contains an invalid text block.', 400, 'invalid_tool_result');
+      }
+      parts.push({ type: 'text', text: block.text });
+    } else if (block.type === 'image') {
+      parts.push(convertAnthropicImage(block));
+    } else {
+      throw new ProxyError(
+        `Anthropic tool result block "${String(block.type)}" cannot be represented as an OpenAI tool result.`,
+        501,
+        'unsupported_tool_result_content'
+      );
+    }
+  }
+
+  if (parts.length === 1 && parts[0].type === 'text') return parts[0].text;
+  return parts;
+}
+
+/** Convert an Anthropic request into the common OpenAI-compatible request format. */
 export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest): OpenAIChatRequest {
   const messages: OpenAIMessage[] = [];
 
-  if (anthropicReq.system) messages.push({ role: 'system', content: anthropicReq.system });
+  const systemText =
+    typeof anthropicReq.system === 'string'
+      ? anthropicReq.system
+      : anthropicReq.system?.map((block) => block.text).join('\n\n');
+  if (systemText) messages.push({ role: 'system', content: systemText });
 
   for (const msg of anthropicReq.messages) {
     if (typeof msg.content === 'string') {
@@ -23,51 +87,40 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
     const contentParts: ContentPart[] = [];
     const toolCalls: ToolCall[] = [];
     const toolResults: OpenAIMessage[] = [];
+    let reasoningText = '';
 
     for (const block of msg.content) {
-      if (block.type === 'text' && block.text) {
-        contentParts.push({ type: 'text', text: block.text });
+      if (block.type === 'text') {
+        if (typeof block.text !== 'string') {
+          throw new ProxyError('Anthropic text block is missing text.', 400, 'invalid_text_block');
+        }
+        if (block.text) contentParts.push({ type: 'text', text: block.text });
       } else if (block.type === 'image') {
-        if (!block.source || !block.source.data || !block.source.media_type) {
+        contentParts.push(convertAnthropicImage(block));
+      } else if (block.type === 'tool_result') {
+        if (!block.tool_use_id) {
           throw new ProxyError(
-            'Anthropic image block is missing a valid base64 source.',
+            'Anthropic tool_result blocks require tool_use_id.',
             400,
-            'invalid_image_block'
+            'invalid_tool_result'
           );
         }
-        contentParts.push({
-          type: 'image_url',
-          image_url: {
-            url: `data:${block.source.media_type};base64,${block.source.data}`,
-          },
+        const resultContent = convertAnthropicToolResult(block.content);
+        const prefix =
+          block.is_error === true
+            ? '[Tool returned an error]\n'
+            : '';
+        const content =
+          prefix && typeof resultContent === 'string'
+            ? prefix + resultContent
+            : prefix && Array.isArray(resultContent)
+              ? [{ type: 'text', text: prefix } as ContentPart, ...resultContent]
+              : resultContent;
+        toolResults.push({
+          role: 'tool',
+          tool_call_id: block.tool_use_id,
+          content,
         });
-      } else if (block.type === 'tool_result') {
-        const toolContent =
-          typeof block.content === 'string'
-            ? block.content
-            : block.content
-              ? block.content
-                  .map((part) => {
-                    if (part.type !== 'text') {
-                      throw new ProxyError(
-                        'Anthropic tool_result blocks with non-text content cannot be converted to OpenAI tool messages.',
-                        501,
-                        'unsupported_tool_result_content'
-                      );
-                    }
-                    return part.text || '';
-                  })
-                  .join(' ')
-              : '';
-        if (block.tool_use_id) {
-          toolResults.push({
-            role: 'tool',
-            tool_call_id: block.tool_use_id,
-            content: toolContent,
-          });
-        } else {
-          contentParts.push({ type: 'text', text: toolContent });
-        }
       } else if (block.type === 'tool_use') {
         if (!block.id || !block.name) {
           throw new ProxyError(
@@ -75,6 +128,12 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
             400,
             'invalid_tool_use'
           );
+        }
+        if (
+          block.input !== undefined &&
+          (!block.input || typeof block.input !== 'object' || Array.isArray(block.input))
+        ) {
+          throw new ProxyError('Anthropic tool_use input must be a JSON object.', 400, 'invalid_tool_use');
         }
         toolCalls.push({
           id: block.id,
@@ -84,6 +143,17 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
             arguments: JSON.stringify(block.input ?? {}),
           },
         });
+      } else if (block.type === 'thinking') {
+        if (msg.role !== 'assistant' || typeof block.thinking !== 'string') {
+          throw new ProxyError('Invalid Anthropic thinking block.', 400, 'invalid_thinking_block');
+        }
+        reasoningText += block.thinking;
+      } else if (block.type === 'redacted_thinking') {
+        throw new ProxyError(
+          'Redacted Anthropic thinking blocks cannot be converted to an OpenAI-compatible provider.',
+          501,
+          'unsupported_thinking_block'
+        );
       } else {
         throw new ProxyError(
           `Anthropic content block type "${String(block.type)}" cannot be converted to OpenAI chat format.`,
@@ -93,6 +163,10 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
       }
     }
 
+    // Anthropic tool results must immediately follow the assistant tool-call message.
+    // Emit those tool messages before any extra user text carried in the same content array.
+    if (toolResults.length > 0) messages.push(...toolResults);
+
     let content: OpenAIMessage['content'] = null;
     if (contentParts.length === 1 && contentParts[0].type === 'text') {
       content = contentParts[0].text;
@@ -100,14 +174,14 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
       content = contentParts;
     }
 
-    if (content !== null || toolCalls.length > 0) {
+    if (content !== null || toolCalls.length > 0 || reasoningText) {
       messages.push({
         role: msg.role,
         content,
         ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+        ...(reasoningText ? { reasoning_content: reasoningText } : {}),
       });
     }
-    messages.push(...toolResults);
   }
 
   const openAIReq: OpenAIChatRequest = {
