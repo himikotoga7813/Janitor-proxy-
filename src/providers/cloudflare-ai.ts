@@ -49,6 +49,10 @@ export class CloudflareAIProvider extends BaseProvider {
         }
       }
 
+      if (params.max_tokens === undefined && request.max_completion_tokens !== undefined) {
+        params.max_tokens = request.max_completion_tokens;
+      }
+
       if (request.stream) {
         return await this.handleStream(params);
       }
