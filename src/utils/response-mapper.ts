@@ -1,11 +1,19 @@
 import { OpenAIChatResponse, OpenAIMessage, StreamToolCallDelta, ToolCall } from '../types';
 
-export function generateId(length: number = 29): string {
+export function generateId(length = 29): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  const bytes = new Uint8Array(length);
+
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < length; index++) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
   }
+
+  let result = '';
+  for (const byte of bytes) result += chars[byte % chars.length];
   return result;
 }
 
@@ -17,12 +25,10 @@ export function createOpenAIResponse(
 ): OpenAIChatResponse {
   const message: OpenAIMessage = {
     role: 'assistant',
-    content: toolCalls ? null : content,
+    content: toolCalls && toolCalls.length > 0 && !content ? null : content,
   };
 
-  if (toolCalls && toolCalls.length > 0) {
-    message.tool_calls = toolCalls;
-  }
+  if (toolCalls && toolCalls.length > 0) message.tool_calls = toolCalls;
 
   return {
     id: `chatcmpl-${generateId()}`,
@@ -46,10 +52,7 @@ export interface StreamDelta {
   tool_calls?: StreamToolCallDelta[];
 }
 
-/**
- * Manages a streaming session with a consistent ID across all chunks.
- * Use one StreamSession per request.
- */
+/** Manages one OpenAI-compatible stream with a stable completion ID. */
 export class StreamSession {
   readonly id: string;
   readonly created: number;
@@ -60,7 +63,6 @@ export class StreamSession {
     this.created = Math.floor(Date.now() / 1000);
   }
 
-  /** Encode a delta into an SSE data line */
   chunk(
     delta: StreamDelta,
     finishReason: 'stop' | 'length' | 'tool_calls' | null = null
@@ -70,31 +72,19 @@ export class StreamSession {
       object: 'chat.completion.chunk',
       created: this.created,
       model: this.model,
-      choices: [
-        {
-          index: 0,
-          delta,
-          finish_reason: finishReason,
-        },
-      ],
+      choices: [{ index: 0, delta, finish_reason: finishReason }],
     };
     return this.encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
   }
 
-  /** The initial chunk that sets the assistant role */
   roleChunk(): Uint8Array {
     return this.chunk({ role: 'assistant', content: '' });
   }
 
-  /** A content text chunk */
   textChunk(text: string): Uint8Array {
     return this.chunk({ content: text });
   }
 
-  /**
-   * Tool call initial chunk — sends id, type, name, and empty arguments.
-   * Per OpenAI spec, each tool_call MUST have `index`.
-   */
   toolCallStartChunk(index: number, callId: string, functionName: string): Uint8Array {
     return this.chunk({
       tool_calls: [
@@ -108,43 +98,23 @@ export class StreamSession {
     });
   }
 
-  /** Incremental arguments chunk for an ongoing tool call */
   toolCallArgsChunk(index: number, args: string): Uint8Array {
     return this.chunk({
-      tool_calls: [
-        {
-          index,
-          function: { arguments: args },
-        },
-      ],
+      tool_calls: [{ index, function: { arguments: args } }],
     });
   }
 
-  /** Final chunk with finish_reason */
   finishChunk(reason: 'stop' | 'tool_calls' | 'length' = 'stop'): Uint8Array {
     return this.chunk({}, reason);
   }
 
-  /** [DONE] sentinel */
   done(): Uint8Array {
     return this.encoder.encode('data: [DONE]\n\n');
   }
 
-  /** Write an SSE error comment (non-standard but helpful for debugging) */
-  errorChunk(_message: string): Uint8Array {
-    const payload = {
-      id: this.id,
-      object: 'chat.completion.chunk',
-      created: this.created,
-      model: this.model,
-      choices: [
-        {
-          index: 0,
-          delta: {},
-          finish_reason: 'stop',
-        },
-      ],
-    };
-    return this.encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+  errorChunk(message: string): Uint8Array {
+    return this.encoder.encode(
+      `data: ${JSON.stringify({ error: { message, type: 'provider_stream_error' } })}\n\n`
+    );
   }
 }
