@@ -40,12 +40,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/zxcloli666/AI-Worker-Proxy.git"
+    "url": "https://github.com/himikotoga7813/Janitor-proxy-.git"
   },
   "bugs": {
-    "url": "https://github.com/zxcloli666/AI-Worker-Proxy/issues"
+    "url": "https://github.com/himikotoga7813/Janitor-proxy-/issues"
   },
-  "homepage": "https://github.com/zxcloli666/AI-Worker-Proxy#readme",
+  "homepage": "https://github.com/himikotoga7813/Janitor-proxy-#readme",
   "author": "noname",
   "license": "MIT",
   "devDependencies": {
