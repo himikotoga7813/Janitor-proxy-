@@ -7,7 +7,7 @@ from openai import OpenAI
 # Initialize client with proxy URL
 # Note: Use the base worker URL, model name determines routing
 client = OpenAI(
-    base_url="https://your-worker.workers.dev/v1/chat/completions",
+    base_url="https://your-worker.workers.dev/v1",
     api_key="your-secret-proxy-token-here"
 )
 

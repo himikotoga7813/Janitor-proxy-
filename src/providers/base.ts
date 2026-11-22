@@ -1,8 +1,9 @@
 import { OpenAIChatRequest, ProviderResponse } from '../types';
+import { getErrorStatusCode } from '../utils/error-handler';
 
 export interface AIProvider {
   /**
-   * Send a chat completion request
+   * Send a chat completion request.
    * @param request OpenAI-format request
    * @param apiKey API key to use
    * @returns Provider response with either response object or stream
@@ -19,22 +20,24 @@ export abstract class BaseProvider implements AIProvider {
   abstract chat(request: OpenAIChatRequest, apiKey: string): Promise<ProviderResponse>;
 
   protected handleError(error: unknown, context: string): ProviderResponse {
-    console.error(`[${context}] Error:`, error);
+    console.error(`[${context}] Provider request failed:`, getErrorStatusCode(error) || 500);
 
-    const e = error as { message?: string; status?: number; statusCode?: number };
-    let statusCode = 500;
-    const message = e.message || 'Unknown error';
-
-    if (e.status) {
-      statusCode = e.status;
-    } else if (e.statusCode) {
-      statusCode = e.statusCode;
-    }
+    const message =
+      error instanceof Error
+        ? error.message
+        : error &&
+            typeof error === 'object' &&
+            'message' in error &&
+            typeof (error as { message?: unknown }).message === 'string'
+          ? (error as { message: string }).message
+          : typeof error === 'string'
+            ? error
+            : 'Unknown provider error';
 
     return {
       success: false,
       error: message,
-      statusCode,
+      statusCode: getErrorStatusCode(error) || 500,
     };
   }
 }

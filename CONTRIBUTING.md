@@ -7,8 +7,8 @@ Thank you for your interest in contributing to AI Worker Proxy!
 1. **Fork and clone the repository**
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/AI-Worker-Proxy.git
-cd AI-Worker-Proxy
+git clone https://github.com/YOUR_USERNAME/Janitor-proxy-.git
+cd Janitor-proxy-
 ```
 
 2. **Install dependencies**

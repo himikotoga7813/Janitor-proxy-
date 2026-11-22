@@ -9,7 +9,10 @@
     "lint": "eslint src --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "type-check": "tsc --noEmit",
-    "check": "tsc --noEmit && eslint src --ext .ts"
+    "check": "npm run type-check && npm run lint && npm run format:check && npm test && npm run audit:prod",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "test": "node --test tests/*.test.cjs",
+    "audit:prod": "npm audit --omit=dev --audit-level=high"
   },
   "keywords": [
     "cloudflare",
@@ -39,22 +42,22 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/zxcloli666/AI-Worker-Proxy.git"
+    "url": "https://github.com/himikotoga7813/Janitor-proxy-.git"
   },
   "bugs": {
-    "url": "https://github.com/zxcloli666/AI-Worker-Proxy/issues"
+    "url": "https://github.com/himikotoga7813/Janitor-proxy-/issues"
   },
-  "homepage": "https://github.com/zxcloli666/AI-Worker-Proxy#readme",
+  "homepage": "https://github.com/himikotoga7813/Janitor-proxy-#readme",
   "author": "noname",
   "license": "MIT",
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260526.1",
+    "@cloudflare/workers-types": "^5.20261121.1",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.57.1",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
-    "wrangler": "^4.95.0"
+    "wrangler": "^4.166.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

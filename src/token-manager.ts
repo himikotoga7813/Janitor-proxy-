@@ -1,6 +1,11 @@
 import { ProviderConfig, Env, OpenAIChatRequest, ProviderResponse } from './types';
 import { createProvider } from './providers';
-import { isRetryableError, withTimeout } from './utils/error-handler';
+import {
+  getErrorStatusCode,
+  getProviderTimeoutMs,
+  isRetryableError,
+  withTimeout,
+} from './utils/error-handler';
 
 export class TokenManager {
   constructor(
@@ -8,23 +13,34 @@ export class TokenManager {
     private env: Env
   ) {}
 
-  /**
-   * Try to execute request with token rotation
-   * Will try all tokens in order until one succeeds
-   */
+  /** Execute against configured keys in order, rotating on authentication and transient failures. */
   async executeWithRotation(request: OpenAIChatRequest): Promise<ProviderResponse> {
     const provider = createProvider(this.config, this.env);
     const apiKeys = this.getApiKeys();
 
-    if (apiKeys.length === 0) {
-      // For providers that don't need API keys (like Cloudflare AI)
-      return await provider.chat(request, '');
+    if (this.config.provider === 'cloudflare-ai') {
+      try {
+        return await withTimeout(provider.chat(request, ''), getProviderTimeoutMs(this.env));
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Cloudflare AI request failed',
+          statusCode: getErrorStatusCode(error) || 502,
+        };
+      }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let lastError: any = null;
+    if (apiKeys.length === 0) {
+      return {
+        success: false,
+        error: `No usable API keys configured for ${this.config.provider}/${this.config.model}`,
+        statusCode: 500,
+      };
+    }
 
-    // Try each API key in order
+    let lastError: unknown = null;
+    let lastStatusCode = 500;
+
     for (let i = 0; i < apiKeys.length; i++) {
       const apiKey = apiKeys[i];
       try {
@@ -32,56 +48,61 @@ export class TokenManager {
           `[TokenManager] Trying ${this.config.provider}/${this.config.model} with key ${i + 1}/${apiKeys.length}`
         );
 
-        const response = await withTimeout(provider.chat(request, apiKey));
+        const response = await withTimeout(
+          provider.chat(request, apiKey),
+          getProviderTimeoutMs(this.env)
+        );
 
         if (response.success) {
           console.log(`[TokenManager] Success with key ${i + 1}/${apiKeys.length}`);
           return response;
         }
 
-        // If response failed but it's retryable, try next key
-        lastError = response.error;
-        console.log(`[TokenManager] Failed with key ${i + 1}/${apiKeys.length}: ${response.error}`);
+        lastError = response.error || 'Provider request failed';
+        lastStatusCode = response.statusCode || 500;
+        console.warn(
+          `[TokenManager] Key ${i + 1}/${apiKeys.length} failed with status ${lastStatusCode}`
+        );
 
-        // If it's not a retryable error, don't try other keys for this provider
-        if (response.statusCode && !this.isRetryableStatusCode(response.statusCode)) {
+        if (
+          ![401, 403].includes(lastStatusCode) &&
+          !isRetryableError({ statusCode: lastStatusCode })
+        ) {
           break;
         }
       } catch (error) {
         lastError = error;
-        console.error(`[TokenManager] Exception with key ${i + 1}/${apiKeys.length}:`, error);
+        lastStatusCode = getErrorStatusCode(error) || 500;
+        console.error(
+          `[TokenManager] Key ${i + 1}/${apiKeys.length} failed with status ${lastStatusCode}`
+        );
 
-        // If it's a retryable error, continue to next key
-        if (!isRetryableError(error)) {
+        if (!isRetryableError(error) && ![401, 403].includes(lastStatusCode)) {
           break;
         }
       }
     }
 
-    // All keys failed
     return {
       success: false,
-      error: lastError?.message || lastError || 'All API keys failed',
-      statusCode: lastError?.statusCode || 500,
+      error:
+        lastError instanceof Error ? lastError.message : String(lastError || 'All API keys failed'),
+      statusCode: lastStatusCode,
     };
   }
 
   private getApiKeys(): string[] {
-    const keys: string[] = [];
+    const keys = new Set<string>();
 
     for (const keyName of this.config.apiKeys) {
       const keyValue = this.env[keyName];
-      if (keyValue) {
-        keys.push(keyValue);
+      if (typeof keyValue === 'string' && keyValue.trim()) {
+        keys.add(keyValue);
       } else {
-        console.warn(`[TokenManager] API key not found in env: ${keyName}`);
+        console.warn(`[TokenManager] API key environment variable is unavailable: ${keyName}`);
       }
     }
 
-    return keys;
-  }
-
-  private isRetryableStatusCode(statusCode: number): boolean {
-    return statusCode === 429 || statusCode === 503 || statusCode === 502;
+    return [...keys];
   }
 }

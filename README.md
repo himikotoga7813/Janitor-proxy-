@@ -1,4 +1,4 @@
-# 🚀 AI Worker Proxy: All AI Models in One API (Free & 100% Uptime)
+# 🚀 AI Worker Proxy: Multiple AI Providers Through One API
 
 [![Deploy to Cloudflare Workers](https://img.shields.io/badge/Deploy-Cloudflare%20Workers-orange?logo=cloudflare)](https://workers.cloudflare.com/)
 [![OpenAI Compatible](https://img.shields.io/badge/OpenAI-Compatible-green)](https://openai.com/)
@@ -6,19 +6,19 @@
 
 Tired of your AI API keys running out of credits or getting rate-limited? Want to use Claude or Gemini but your app only supports OpenAI?
 
-This is a **Free AI Gateway** that runs on Cloudflare Workers. It acts as a middleman: you send it an OpenAI-style request, and it routes it to **ChatGPT, Claude, Gemini, or even free local models**, rotating your API keys automatically so you never hit limits.
+This is an AI gateway that runs on Cloudflare Workers. Send an OpenAI-style request and it routes it to the configured provider, such as OpenAI-compatible APIs, Anthropic, Gemini, or Workers AI. It can retry configured credentials and fail over between providers, subject to each upstream provider's quotas, model limits, account status, and pricing.
 
-- **💰 Cost:** $0 (Runs on Cloudflare's free tier - 100k requests/day).
+- **💰 Cost:** Depends on your Cloudflare plan and upstream AI providers. Provider/API usage may incur charges.
 - **⚡ Setup time:** 5 minutes. No coding required.
 
 ---
 
 ## 🔥 Why You Need This
 
-*   **100% Uptime (Failover):** If OpenAI goes down, it instantly switches to Claude or Gemini. Your app never stops working.
-*   **Key Rotation:** Put in 5 different API keys. It will use them one by one. Bye-bye rate limits.
+*   **Provider failover:** If a configured provider fails, the proxy can try another configured provider. Availability is not guaranteed.
+*   **Credential rotation:** Configured credentials can be tried in order for eligible authentication or transient failures. This does not bypass provider rate limits or quotas.
 *   **One API to Rule Them All:** Talk to Anthropic Claude 3.5, Google Gemini 2.0, and GPT-4o using the exact same code.
-*   **Stealth Configuration:** Change your routing logic via GitHub Variables without touching a single line of code.
+*   **Configuration:** Change your routing logic via GitHub Variables without editing source files.
 
 ---
 
@@ -30,7 +30,7 @@ You don't need to know how to code. Just follow these 4 steps to get your own pr
 Scroll to the top right of this GitHub page and click the **"Fork"** button. This creates your own copy of the project.
 
 ### Step 2: Add Cloudflare Secrets to GitHub
-Your GitHub needs permission to push the code to your Cloudflare account.
+GitHub Actions needs a Cloudflare API token to deploy your Worker. The workflow does not push formatting changes back to your repository.
 
 1. Go to your new forked repository.
 2. Click **Settings** (top tab) -> **Secrets and variables** (left sidebar) -> **Actions**.
@@ -58,7 +58,7 @@ Now you just need to feed it your API keys (OpenAI, Claude, etc).
 2. Click **"Workers & Pages"** on the left sidebar.
 3. Click on your new worker (it should be named `ai-worker-proxy`).
 4. Go to the **"Settings"** tab -> **"Variables and Secrets"** (on the left).
-5. Under **Environment Variables**, click **"Add"**. Add these:
+5. Under **Variables and Secrets**, store these as encrypted **Secrets** (not plaintext variables):
 
 | Variable Name | Value (Example) | What is it? |
 |--------------|-----------------|-------------|
@@ -67,7 +67,7 @@ Now you just need to feed it your API keys (OpenAI, Claude, etc).
 | `GOOGLE_KEY_1` | `AIza...` | Your Google Gemini API Key |
 | `OPENAI_KEY_1` | `sk-proj-...` | Your OpenAI API Key |
 
-Click **Save and Deploy**. You're done! 🎉
+Save the secrets. Do not commit real keys or tokens to Git.
 
 ---
 
@@ -75,7 +75,7 @@ Click **Save and Deploy**. You're done! 🎉
 
 You don't need to edit `wrangler.toml` or commit any code to change how your models behave. You can do it stealthily using **GitHub Variables**.
 
-This allows you to update your model lists or failover logic without anyone seeing it in your file history.
+This allows you to update model routes and failover order without committing the configuration JSON to your source tree.
 
 1. Go to your GitHub Repo -> **Settings** -> **Secrets and variables** -> **Actions**.
 2. Click the **Variables** tab (next to Secrets).
@@ -118,6 +118,12 @@ This allows you to update your model lists or failover logic without anyone seei
 
 **How to apply changes:**
 After saving the variable, just go to the **Actions** tab and run the **"Deploy to Cloudflare"** workflow again. It will inject your new config automatically.
+
+---
+
+## ⏱️ Provider connection timeout
+
+The default timeout for establishing an upstream response is 120 seconds. You can optionally set `PROVIDER_TIMEOUT_MS` (1,000–600,000 milliseconds) in Worker settings. For streaming requests this timeout covers opening the upstream stream, not its full lifetime. Model context windows, output limits, payload limits, and upstream quotas still apply.
 
 ---
 
@@ -247,7 +253,7 @@ Edit the `ROUTES_CONFIG` GitHub Variable (or your local `wrangler.toml`) and add
 
 ### Step 3: Deploy
 
-Push any commit to `main` (or manually re-run the **"Deploy to Cloudflare"** workflow in Actions). Done!
+Push a commit to `main` or manually run the **"Deploy to Cloudflare"** workflow. The deploy workflow validates `ROUTES_CONFIG` before deploying.
 
 > Want an example? See [examples/example-config.toml](examples/example-config.toml)
 
@@ -262,7 +268,7 @@ Push any commit to `main` (or manually re-run the **"Deploy to Cloudflare"** wor
 ## 💬 Support
 
 Found a bug? Need help?
-Open an issue in the [GitHub Issues](https://github.com/zxcloli666/AI-Worker-Proxy/issues) tab.
+Open an issue in the [GitHub Issues](https://github.com/himikotoga7813/Janitor-proxy-/issues) tab.
 
 ### ⭐ If this saved you money or time, please drop a Star on the repo! It helps a lot!
 
