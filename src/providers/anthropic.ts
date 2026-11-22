@@ -38,7 +38,7 @@ export class AnthropicProvider extends BaseProvider {
       };
 
       if (system) params.system = system;
-      if (tools?.length) params.tools = tools;
+      if (tools?.length && request.tool_choice !== 'none') params.tools = tools;
       if (request.stop) {
         params.stop_sequences = Array.isArray(request.stop) ? request.stop : [request.stop];
       }
@@ -78,7 +78,7 @@ export class AnthropicProvider extends BaseProvider {
       const client = new Anthropic(clientOpts);
 
       const params: Record<string, unknown> = {
-        model: request.model,
+        model: this.model,
         messages: request.messages,
         max_tokens: request.max_tokens ?? 4096,
         stream: request.stream ?? false,
@@ -87,7 +87,6 @@ export class AnthropicProvider extends BaseProvider {
       if (request.system) params.system = request.system;
       if (request.temperature !== undefined) params.temperature = request.temperature;
       if (request.top_p !== undefined) params.top_p = request.top_p;
-      if (request.top_k !== undefined) params.top_k = request.top_k;
       if (request.top_k !== undefined) params.top_k = request.top_k;
       if (request.stop_sequences) params.stop_sequences = request.stop_sequences;
       if (request.metadata) params.metadata = request.metadata;
@@ -277,7 +276,7 @@ export class AnthropicProvider extends BaseProvider {
     const convertedMessages: Anthropic.MessageParam[] = [];
 
     for (const msg of messages) {
-      if (msg.role === 'system') {
+      if (msg.role === 'system' || msg.role === 'developer') {
         const text =
           typeof msg.content === 'string'
             ? msg.content
@@ -361,7 +360,7 @@ export class AnthropicProvider extends BaseProvider {
         }
 
         if (content.length > 0) convertedMessages.push({ role: msg.role, content });
-      } else if (msg.role === 'tool') {
+      } else if (msg.role === 'tool' || msg.role === 'function') {
         const toolContent =
           typeof msg.content === 'string'
             ? msg.content || ''
@@ -380,7 +379,9 @@ export class AnthropicProvider extends BaseProvider {
                   .join(' ')
               : '';
 
-        if (msg.tool_call_id) {
+        if (msg.role === 'function') {
+          convertedMessages.push({ role: 'user', content: `Function ${msg.name} result: ${toolContent}` });
+        } else if (msg.tool_call_id) {
           convertedMessages.push({
             role: 'user',
             content: [
@@ -392,7 +393,7 @@ export class AnthropicProvider extends BaseProvider {
             ],
           });
         } else {
-          convertedMessages.push({ role: 'user', content: toolContent });
+          throw new ProxyError('Anthropic tool messages require tool_call_id.', 400, 'invalid_tool_result');
         }
       }
     }
