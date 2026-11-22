@@ -79,6 +79,7 @@ export class OpenAIProvider extends BaseProvider {
               delta.reasoning_content,
               delta.reasoning,
               delta.thinking,
+              delta.reasoning_details,
               delta.reasoning_details
             );
             const nextDelta: Record<string, unknown> = { ...delta };
@@ -86,6 +87,7 @@ export class OpenAIProvider extends BaseProvider {
             delete nextDelta.reasoning_content;
             delete nextDelta.reasoning;
             delete nextDelta.thinking;
+            delete nextDelta.reasoning_details;
 
             let normalizedText = '';
             if (reasoning) normalizedText += formatter.pushReasoning(reasoning);
