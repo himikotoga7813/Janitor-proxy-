@@ -31,7 +31,7 @@ export class AnthropicProvider extends BaseProvider {
       const params: any = {
         model: this.model,
         messages,
-        max_tokens: request.max_tokens ?? 4096,
+        max_tokens: request.max_tokens ?? request.max_completion_tokens ?? 4096,
         temperature: request.temperature,
         top_p: request.top_p,
         stream: request.stream ?? false,
@@ -282,7 +282,16 @@ export class AnthropicProvider extends BaseProvider {
           typeof msg.content === 'string'
             ? msg.content
             : msg.content
-              ? msg.content.map((part) => (part.type === 'text' ? part.text : '')).join(' ')
+              ? msg.content.map((part) => {
+                  if (part.type !== 'text') {
+                    throw new ProxyError(
+                      'Anthropic system messages support text content only.',
+                      501,
+                      'unsupported_content_part'
+                    );
+                  }
+                  return part.text;
+                }).join(' ')
               : '';
         if (text) systemParts.push(text);
       } else if (msg.role === 'user' || msg.role === 'assistant') {
