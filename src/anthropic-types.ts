@@ -1,22 +1,35 @@
 // Anthropic Messages API types
 
+export interface AnthropicTextBlock {
+  type: 'text';
+  text: string;
+  cache_control?: Record<string, unknown>;
+}
+
+export type AnthropicImageSource =
+  | {
+      type: 'base64';
+      media_type: string;
+      data: string;
+    }
+  | {
+      type: 'url';
+      url: string;
+    };
+
 export interface AnthropicContentBlock {
-  type: 'text' | 'image' | 'tool_use' | 'tool_result';
+  type: 'text' | 'image' | 'tool_use' | 'tool_result' | 'thinking' | 'redacted_thinking';
   text?: string;
-  // image source
-  source?: {
-    type: 'base64';
-    media_type: string;
-    data: string;
-  };
-  // tool_use
+  source?: AnthropicImageSource;
   id?: string;
   name?: string;
   input?: unknown;
-  // tool_result
   tool_use_id?: string;
   content?: string | AnthropicContentBlock[];
   is_error?: boolean;
+  thinking?: string;
+  signature?: string;
+  data?: string;
 }
 
 export interface AnthropicMessage {
@@ -27,7 +40,7 @@ export interface AnthropicMessage {
 export interface AnthropicRequest {
   model: string;
   messages: AnthropicMessage[];
-  system?: string;
+  system?: string | AnthropicTextBlock[];
   max_tokens?: number;
   metadata?: Record<string, string>;
   stop_sequences?: string[];
@@ -37,6 +50,7 @@ export interface AnthropicRequest {
   top_k?: number;
   tools?: AnthropicTool[];
   tool_choice?: { type: 'auto' | 'any' | 'tool'; name?: string };
+  thinking?: { type: 'enabled'; budget_tokens: number } | { type: 'disabled' };
 }
 
 export interface AnthropicTool {
