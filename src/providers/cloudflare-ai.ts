@@ -76,7 +76,17 @@ export class CloudflareAIProvider extends BaseProvider {
     if (typeof response === 'string') {
       content = response;
     } else if (typeof response?.response === 'string') {
-      content = response.response;
+      const reasoning = extractReasoningText(
+        response.reasoning_content,
+        response.reasoning,
+        response.thinking,
+        response.reasoning_details
+      );
+      const formatter = new ReasoningStreamFormatter();
+      content =
+        (reasoning ? formatter.pushReasoning(reasoning) : '') +
+        formatter.pushContent(response.response) +
+        formatter.finish();
     }
 
     let toolCalls: ToolCall[] | undefined;
@@ -160,7 +170,8 @@ export class CloudflareAIProvider extends BaseProvider {
             const reasoning = extractReasoningText(
               delta.reasoning_content,
               delta.reasoning,
-              delta.thinking
+              delta.thinking,
+          delta.reasoning_details
             );
             if (reasoning) {
               await writer.write(session.textChunk(formatter.pushReasoning(reasoning)));
