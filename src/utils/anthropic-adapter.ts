@@ -198,6 +198,7 @@ export class AnthropicStreamAdapter {
   private textBlockActive = false;
   private toolBlockActive = false;
   private finished = false;
+  private outputTokens = 0;
 
   constructor(
     private model: string,
@@ -263,7 +264,7 @@ export class AnthropicStreamAdapter {
       this.encodeSSE('message_delta', {
         type: 'message_delta',
         delta: { stop_reason: reason || 'end_turn', stop_sequence: null },
-        usage: { output_tokens: 0 },
+        usage: { output_tokens: this.outputTokens },
       })
     );
     controller.enqueue(this.encodeSSE('message_stop', { type: 'message_stop' }));
@@ -321,6 +322,11 @@ export class AnthropicStreamAdapter {
       );
       this.finished = true;
       return toolIndex;
+    }
+
+    const usage = parsed.usage as Record<string, unknown> | undefined;
+    if (usage && typeof usage.completion_tokens === 'number') {
+      this.outputTokens = usage.completion_tokens;
     }
 
     const choices = parsed.choices;
