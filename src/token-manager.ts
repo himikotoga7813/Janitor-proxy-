@@ -56,7 +56,10 @@ export class TokenManager {
           `[TokenManager] Key ${i + 1}/${apiKeys.length} failed with status ${lastStatusCode}`
         );
 
-        if (![401, 403].includes(lastStatusCode) && !isRetryableError({ statusCode: lastStatusCode })) {
+        if (
+          ![401, 403].includes(lastStatusCode) &&
+          !isRetryableError({ statusCode: lastStatusCode })
+        ) {
           break;
         }
       } catch (error) {
@@ -74,7 +77,8 @@ export class TokenManager {
 
     return {
       success: false,
-      error: lastError instanceof Error ? lastError.message : String(lastError || 'All API keys failed'),
+      error:
+        lastError instanceof Error ? lastError.message : String(lastError || 'All API keys failed'),
       statusCode: lastStatusCode,
     };
   }

@@ -11,11 +11,8 @@ export class ProxyError extends Error {
 
 export function createErrorResponse(error: unknown): Response {
   const isProxyError = error instanceof ProxyError;
-  const statusCode = isProxyError
-    ? error.statusCode
-    : getErrorStatusCode(error) || 500;
-  const message =
-    error instanceof Error ? error.message : 'Unknown error occurred';
+  const statusCode = isProxyError ? error.statusCode : getErrorStatusCode(error) || 500;
+  const message = error instanceof Error ? error.message : 'Unknown error occurred';
 
   return new Response(
     JSON.stringify({
@@ -54,8 +51,7 @@ export function isRateLimitError(error: unknown): boolean {
   return (
     e.status === 429 ||
     e.statusCode === 429 ||
-    (typeof e.message === 'string' &&
-      /rate.?limit|too many requests/i.test(e.message)) ||
+    (typeof e.message === 'string' && /rate.?limit|too many requests/i.test(e.message)) ||
     e.code === 'rate_limit_exceeded'
   );
 }

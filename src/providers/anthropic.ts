@@ -39,10 +39,7 @@ export class AnthropicProvider extends BaseProvider {
       if (request.tool_choice) {
         if (request.tool_choice === 'none') {
           params.tool_choice = { type: 'none' };
-        } else if (
-          request.tool_choice === 'auto' ||
-          request.tool_choice === 'required'
-        ) {
+        } else if (request.tool_choice === 'auto' || request.tool_choice === 'required') {
           params.tool_choice =
             request.tool_choice === 'required' ? { type: 'any' } : { type: 'auto' };
         } else if (
@@ -168,19 +165,14 @@ export class AnthropicProvider extends BaseProvider {
             const delta = event.delta as unknown as Record<string, unknown>;
             if (delta.type === 'text_delta' && typeof delta.text === 'string') {
               await writer.write(session.textChunk(formatter.pushContent(delta.text)));
-            } else if (
-              delta.type === 'thinking_delta' &&
-              typeof delta.thinking === 'string'
-            ) {
+            } else if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
               await writer.write(session.textChunk(formatter.pushReasoning(delta.thinking)));
             } else if (
               delta.type === 'input_json_delta' &&
               typeof delta.partial_json === 'string' &&
               toolCallIndex >= 0
             ) {
-              await writer.write(
-                session.toolCallArgsChunk(toolCallIndex, delta.partial_json)
-              );
+              await writer.write(session.toolCallArgsChunk(toolCallIndex, delta.partial_json));
             }
           } else if (event.type === 'message_stop') {
             const closing = formatter.finish();

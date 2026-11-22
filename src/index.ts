@@ -140,8 +140,7 @@ async function handleAnthropicChat(request: Request, env: Env): Promise<Response
   const router = new Router(env);
   const providers = router.getProvidersForModel(body.model);
   const hasAnthropicNative = providers.some(
-    (provider) =>
-      provider.provider === 'anthropic' || provider.provider === 'anthropic-compatible'
+    (provider) => provider.provider === 'anthropic' || provider.provider === 'anthropic-compatible'
   );
 
   if (hasAnthropicNative) return handleAnthropicNativePath(body, providers, env);
@@ -202,7 +201,9 @@ async function handleAnthropicNativePath(
       } catch (error) {
         lastError = error;
         lastStatusCode =
-          error && typeof error === 'object' && 'statusCode' in error &&
+          error &&
+          typeof error === 'object' &&
+          'statusCode' in error &&
           typeof (error as { statusCode?: unknown }).statusCode === 'number'
             ? (error as { statusCode: number }).statusCode
             : 502;
@@ -220,7 +221,8 @@ async function handleAnthropicNativePath(
     return handleAnthropicConversionPath(body, router, otherProviders);
   }
 
-  const message = lastError instanceof Error ? lastError.message : String(lastError || 'Unknown error');
+  const message =
+    lastError instanceof Error ? lastError.message : String(lastError || 'Unknown error');
   throw new ProxyError(`All Anthropic providers failed: ${message}`, lastStatusCode);
 }
 
@@ -282,7 +284,11 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
     throw new ProxyError('Invalid request: model is required', 400, 'invalid_request');
   }
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
-    throw new ProxyError('Invalid request: a non-empty messages array is required', 400, 'invalid_request');
+    throw new ProxyError(
+      'Invalid request: a non-empty messages array is required',
+      400,
+      'invalid_request'
+    );
   }
 
   for (let index = 0; index < body.messages.length; index++) {
@@ -307,17 +313,25 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
 
   for (const field of ['temperature', 'top_p', 'frequency_penalty', 'presence_penalty'] as const) {
     const fieldValue = body[field];
-    if (fieldValue !== undefined && (typeof fieldValue !== 'number' || !Number.isFinite(fieldValue))) {
+    if (
+      fieldValue !== undefined &&
+      (typeof fieldValue !== 'number' || !Number.isFinite(fieldValue))
+    ) {
       throw new ProxyError(`${field} must be a finite number`, 400, 'invalid_request');
     }
   }
   if (
     body.max_tokens !== undefined &&
-    (typeof body.max_tokens !== 'number' || !Number.isInteger(body.max_tokens) || body.max_tokens < 1)
+    (typeof body.max_tokens !== 'number' ||
+      !Number.isInteger(body.max_tokens) ||
+      body.max_tokens < 1)
   ) {
     throw new ProxyError('max_tokens must be a positive integer', 400, 'invalid_request');
   }
-  if (body.n !== undefined && (typeof body.n !== 'number' || !Number.isInteger(body.n) || body.n < 1)) {
+  if (
+    body.n !== undefined &&
+    (typeof body.n !== 'number' || !Number.isInteger(body.n) || body.n < 1)
+  ) {
     throw new ProxyError('n must be a positive integer', 400, 'invalid_request');
   }
   if (body.stream !== undefined && typeof body.stream !== 'boolean') {
@@ -340,11 +354,17 @@ function validateAnthropicRequest(value: unknown): AnthropicRequest {
     throw new ProxyError('Invalid request: model is required', 400, 'invalid_request');
   }
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
-    throw new ProxyError('Invalid request: a non-empty messages array is required', 400, 'invalid_request');
+    throw new ProxyError(
+      'Invalid request: a non-empty messages array is required',
+      400,
+      'invalid_request'
+    );
   }
   if (
     body.max_tokens !== undefined &&
-    (typeof body.max_tokens !== 'number' || !Number.isInteger(body.max_tokens) || body.max_tokens < 1)
+    (typeof body.max_tokens !== 'number' ||
+      !Number.isInteger(body.max_tokens) ||
+      body.max_tokens < 1)
   ) {
     throw new ProxyError('max_tokens must be a positive integer', 400, 'invalid_request');
   }

@@ -45,9 +45,7 @@ export class CloudflareAIProvider extends BaseProvider {
       for (const key of supportedOptions) {
         if (request[key] !== undefined) {
           params[key] =
-            key === 'tools' && request.tools
-              ? this.convertTools(request.tools)
-              : request[key];
+            key === 'tools' && request.tools ? this.convertTools(request.tools) : request[key];
         }
       }
 
@@ -142,7 +140,8 @@ export class CloudflareAIProvider extends BaseProvider {
           payload.reasoning,
           payload.thinking
         );
-        if (rootReasoning) await writer.write(session.textChunk(rootFormatter.pushReasoning(rootReasoning)));
+        if (rootReasoning)
+          await writer.write(session.textChunk(rootFormatter.pushReasoning(rootReasoning)));
 
         // Native Cloudflare Workers AI response shape.
         if (typeof payload.response === 'string') {
@@ -171,7 +170,7 @@ export class CloudflareAIProvider extends BaseProvider {
               delta.reasoning_content,
               delta.reasoning,
               delta.thinking,
-          delta.reasoning_details
+              delta.reasoning_details
             );
             if (reasoning) {
               await writer.write(session.textChunk(formatter.pushReasoning(reasoning)));
@@ -199,8 +198,7 @@ export class CloudflareAIProvider extends BaseProvider {
                 const callId: string = existingCallId || generatedCallId;
                 toolCallIds.set(callIndex, callId);
 
-                const functionName: string =
-                  typeof fn.name === 'string' ? fn.name : '';
+                const functionName: string = typeof fn.name === 'string' ? fn.name : '';
                 if (!startedToolCalls.has(callIndex) && (call.id || functionName)) {
                   startedToolCalls.add(callIndex);
                   await writer.write(
@@ -208,12 +206,9 @@ export class CloudflareAIProvider extends BaseProvider {
                   );
                 }
 
-                const argumentsDelta: string =
-                  typeof fn.arguments === 'string' ? fn.arguments : '';
+                const argumentsDelta: string = typeof fn.arguments === 'string' ? fn.arguments : '';
                 if (argumentsDelta.length > 0) {
-                  await writer.write(
-                    session.toolCallArgsChunk(callIndex, String(argumentsDelta))
-                  );
+                  await writer.write(session.toolCallArgsChunk(callIndex, String(argumentsDelta)));
                 }
               }
             }

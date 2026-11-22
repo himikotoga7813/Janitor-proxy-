@@ -63,9 +63,7 @@ export class Router {
       ? this.sortByPreferredType(providers, preferredType)
       : providers;
 
-    console.log(
-      `[Router] Model "${model}" has ${orderedProviders.length} provider(s) configured`
-    );
+    console.log(`[Router] Model "${model}" has ${orderedProviders.length} provider(s) configured`);
 
     let lastError = 'Unknown provider error';
     let lastStatusCode = 502;
@@ -116,13 +114,11 @@ export class Router {
   ): ProviderConfig[] {
     const preferred = providers.filter(
       (provider) =>
-        provider.provider === preferredType ||
-        provider.provider === `${preferredType}-compatible`
+        provider.provider === preferredType || provider.provider === `${preferredType}-compatible`
     );
     const rest = providers.filter(
       (provider) =>
-        provider.provider !== preferredType &&
-        provider.provider !== `${preferredType}-compatible`
+        provider.provider !== preferredType && provider.provider !== `${preferredType}-compatible`
     );
     return [...preferred, ...rest];
   }
@@ -175,16 +171,17 @@ export class Router {
             throw new Error(`Provider model is missing in route "${alias}" at index ${index}`);
           }
 
-          const apiKeys = provider.apiKeys === undefined && provider.provider === 'cloudflare-ai'
-            ? []
-            : provider.apiKeys;
+          const apiKeys =
+            provider.apiKeys === undefined && provider.provider === 'cloudflare-ai'
+              ? []
+              : provider.apiKeys;
           if (
             !Array.isArray(apiKeys) ||
-            !apiKeys.every(
-              (key) => typeof key === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key)
-            )
+            !apiKeys.every((key) => typeof key === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
           ) {
-            throw new Error(`apiKeys must be an array of environment variable names in route "${alias}"`);
+            throw new Error(
+              `apiKeys must be an array of environment variable names in route "${alias}"`
+            );
           }
           if (provider.provider !== 'cloudflare-ai' && apiKeys.length === 0) {
             throw new Error(`At least one API key variable is required for route "${alias}"`);
@@ -204,8 +201,14 @@ export class Router {
             } catch {
               throw new Error(`baseUrl is not a valid URL in route "${alias}"`);
             }
-            if (!['http:', 'https:'].includes(parsedUrl.protocol) || parsedUrl.username || parsedUrl.password) {
-              throw new Error(`baseUrl must be an HTTP(S) URL without embedded credentials in route "${alias}"`);
+            if (
+              !['http:', 'https:'].includes(parsedUrl.protocol) ||
+              parsedUrl.username ||
+              parsedUrl.password
+            ) {
+              throw new Error(
+                `baseUrl must be an HTTP(S) URL without embedded credentials in route "${alias}"`
+              );
             }
             baseUrl = parsedUrl.toString().replace(/\/$/, '');
           }

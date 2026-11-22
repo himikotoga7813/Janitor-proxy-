@@ -3,10 +3,7 @@ import { BaseProvider } from './base';
 import { ProxyError } from '../utils/error-handler';
 import { OpenAIChatRequest, ProviderResponse, OpenAIMessage, ToolCall } from '../types';
 import { createOpenAIResponse, StreamSession, generateId } from '../utils/response-mapper';
-import {
-  extractReasoningText,
-  ReasoningStreamFormatter,
-} from '../utils/reasoning';
+import { extractReasoningText, ReasoningStreamFormatter } from '../utils/reasoning';
 
 /**
  * Thought signatures are required by Gemini 3 for function calling.
@@ -106,8 +103,7 @@ export class GoogleProvider extends BaseProvider {
         config.toolConfig = {
           functionCallingConfig: {
             mode,
-            ...(typeof request.tool_choice === 'object' &&
-            request.tool_choice.type === 'function'
+            ...(typeof request.tool_choice === 'object' && request.tool_choice.type === 'function'
               ? { allowedFunctionNames: [request.tool_choice.function.name] }
               : {}),
           },
@@ -145,9 +141,7 @@ export class GoogleProvider extends BaseProvider {
       ?.filter((part) => part.thought !== true && typeof part.text === 'string')
       .map((part) => part.text as string)
       .join('');
-    const content = parts
-      ? visibleText || ''
-      : response.text || '';
+    const content = parts ? visibleText || '' : response.text || '';
 
     const toolParts = parts?.filter((part) => part.functionCall);
     let toolCalls: ToolCall[] | undefined;
@@ -230,11 +224,7 @@ export class GoogleProvider extends BaseProvider {
               hasToolCalls = true;
               const callId = encodeToolCallId(part.thoughtSignature as string | undefined);
               await writer.write(
-                session.toolCallStartChunk(
-                  toolCallIndex,
-                  callId,
-                  part.functionCall.name || ''
-                )
+                session.toolCallStartChunk(toolCallIndex, callId, part.functionCall.name || '')
               );
               await writer.write(
                 session.toolCallArgsChunk(
