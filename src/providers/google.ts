@@ -2,11 +2,14 @@ import { GoogleGenAI, type Content, type Part } from '@google/genai';
 import { BaseProvider } from './base';
 import { OpenAIChatRequest, ProviderResponse, OpenAIMessage, ToolCall } from '../types';
 import { createOpenAIResponse, StreamSession, generateId } from '../utils/response-mapper';
+import {
+  extractReasoningText,
+  ReasoningStreamFormatter,
+} from '../utils/reasoning';
 
 /**
  * Thought signatures are required by Gemini 3 for function calling.
- * We encode them into the tool call ID so they survive the round-trip
- * through OpenAI-format clients that don't know about signatures.
+ * They are opaque metadata, not user-visible reasoning text.
  *
  * Format: tsig:<base64url_signature>:<randomId>
  */
@@ -24,8 +27,25 @@ function decodeThoughtSignature(toolCallId: string): string | undefined {
   const rest = toolCallId.slice(TSIG_PREFIX.length);
   const colonIdx = rest.lastIndexOf(':');
   if (colonIdx === -1) return undefined;
-  const encoded = rest.slice(0, colonIdx);
-  return atob(encoded.replace(/-/g, '+').replace(/_/g, '/'));
+
+  try {
+    const encoded = rest.slice(0, colonIdx).replace(/-/g, '+').replace(/_/g, '/');
+    const padded = encoded + '='.repeat((4 - (encoded.length % 4)) % 4);
+    return atob(padded);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseToolArguments(value: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 export class GoogleProvider extends BaseProvider {
@@ -42,10 +62,8 @@ export class GoogleProvider extends BaseProvider {
 
       const { systemInstruction, contents } = this.convertMessages(request.messages);
 
-      // Build tools array
       const tools: Record<string, unknown>[] = [];
 
-      // User-defined function declarations
       if (request.tools && request.tools.length > 0) {
         tools.push({
           functionDeclarations: request.tools.map((tool) => ({
@@ -56,22 +74,43 @@ export class GoogleProvider extends BaseProvider {
         });
       }
 
-      // Google Search grounding
-      if (this.grounding) {
-        tools.push({ googleSearch: {} });
+      if (this.grounding) tools.push({ googleSearch: {} });
+
+      const config: Record<string, unknown> = {};
+      if (request.temperature !== undefined) config.temperature = request.temperature;
+      if (request.max_tokens !== undefined) config.maxOutputTokens = request.max_tokens;
+      if (request.top_p !== undefined) config.topP = request.top_p;
+      if (request.top_k !== undefined) config.topK = request.top_k;
+      if (request.n !== undefined) config.candidateCount = request.n;
+      if (request.frequency_penalty !== undefined) {
+        config.frequencyPenalty = request.frequency_penalty;
+      }
+      if (request.presence_penalty !== undefined) {
+        config.presencePenalty = request.presence_penalty;
+      }
+      if (request.stop) {
+        config.stopSequences = Array.isArray(request.stop) ? request.stop : [request.stop];
       }
 
-      const config: Record<string, unknown> = {
-        temperature: request.temperature,
-        maxOutputTokens: request.max_tokens,
-        topP: request.top_p,
-      };
+      if (systemInstruction) config.systemInstruction = systemInstruction;
+      if (tools.length > 0) config.tools = tools;
 
-      if (systemInstruction) {
-        config.systemInstruction = systemInstruction;
-      }
-      if (tools.length > 0) {
-        config.tools = tools;
+      if (request.tool_choice) {
+        const mode =
+          request.tool_choice === 'none'
+            ? 'NONE'
+            : request.tool_choice === 'required'
+              ? 'ANY'
+              : 'AUTO';
+        config.toolConfig = {
+          functionCallingConfig: {
+            mode,
+            ...(typeof request.tool_choice === 'object' &&
+            request.tool_choice.type === 'function'
+              ? { allowedFunctionNames: [request.tool_choice.function.name] }
+              : {}),
+          },
+        };
       }
 
       if (request.stream) {
@@ -94,30 +133,48 @@ export class GoogleProvider extends BaseProvider {
       config,
     });
 
-    const content = response.text || '';
-    let toolCalls: ToolCall[] | undefined;
+    const parts = response.candidates?.[0]?.content?.parts as
+      | (Part & Record<string, unknown>)[]
+      | undefined;
+    const reasoning = parts
+      ?.filter((part) => part.thought === true && typeof part.text === 'string')
+      .map((part) => part.text as string)
+      .join('');
+    const visibleText = parts
+      ?.filter((part) => part.thought !== true && typeof part.text === 'string')
+      .map((part) => part.text as string)
+      .join('');
+    const content = parts
+      ? visibleText || ''
+      : response.text || '';
 
-    // Extract function calls with thought signatures
-    const parts = response.candidates?.[0]?.content?.parts;
-    if (parts) {
-      const fcParts = parts.filter((p: Part) => p.functionCall);
-      if (fcParts.length > 0) {
-        toolCalls = fcParts.map((p: Part) => ({
-          id: encodeToolCallId((p as Record<string, unknown>).thoughtSignature as string),
-          type: 'function' as const,
-          function: {
-            name: p.functionCall!.name || '',
-            arguments: JSON.stringify(p.functionCall!.args || {}),
-          },
-        }));
-      }
+    const toolParts = parts?.filter((part) => part.functionCall);
+    let toolCalls: ToolCall[] | undefined;
+    if (toolParts && toolParts.length > 0) {
+      toolCalls = toolParts.map((part) => ({
+        id: encodeToolCallId(part.thoughtSignature as string | undefined),
+        type: 'function' as const,
+        function: {
+          name: part.functionCall?.name || '',
+          arguments: JSON.stringify(part.functionCall?.args || {}),
+        },
+      }));
     }
 
-    const finishReason = toolCalls ? 'tool_calls' : 'stop';
+    const formatter = new ReasoningStreamFormatter();
+    const formattedContent =
+      (reasoning ? formatter.pushReasoning(reasoning) : '') +
+      formatter.pushContent(content) +
+      formatter.finish();
 
     return {
       success: true,
-      response: createOpenAIResponse(content, this.model, finishReason, toolCalls),
+      response: createOpenAIResponse(
+        formattedContent,
+        this.model,
+        toolCalls ? 'tool_calls' : 'stop',
+        toolCalls
+      ),
     };
   }
 
@@ -135,51 +192,84 @@ export class GoogleProvider extends BaseProvider {
     const { readable, writable } = new TransformStream<Uint8Array>();
     const writer = writable.getWriter();
     const session = new StreamSession(this.model);
+    const formatter = new ReasoningStreamFormatter();
 
     (async () => {
       try {
         await writer.write(session.roleChunk());
         let hasToolCalls = false;
+        let toolCallIndex = 0;
 
         for await (const chunk of response) {
-          // Text content
-          if (chunk.text) {
-            await writer.write(session.textChunk(chunk.text));
-          }
+          const parts = chunk.candidates?.[0]?.content?.parts as
+            | (Part & Record<string, unknown>)[]
+            | undefined;
 
-          // Function calls
-          const parts = chunk.candidates?.[0]?.content?.parts;
           if (parts) {
-            const fcParts = parts.filter((p: Part) => p.functionCall);
-            for (let i = 0; i < fcParts.length; i++) {
-              const p = fcParts[i];
-              hasToolCalls = true;
-              const callId = encodeToolCallId(
-                (p as Record<string, unknown>).thoughtSignature as string
-              );
-              await writer.write(session.toolCallStartChunk(i, callId, p.functionCall!.name || ''));
-              await writer.write(
-                session.toolCallArgsChunk(i, JSON.stringify(p.functionCall!.args || {}))
-              );
+            const reasoning = extractReasoningText(
+              parts
+                .filter((part) => part.thought === true && typeof part.text === 'string')
+                .map((part) => part.text)
+            );
+            const visibleText = extractReasoningText(
+              parts
+                .filter((part) => part.thought !== true && typeof part.text === 'string')
+                .map((part) => part.text)
+            );
+
+            if (reasoning) {
+              await writer.write(session.textChunk(formatter.pushReasoning(reasoning)));
             }
+            if (visibleText) {
+              await writer.write(session.textChunk(formatter.pushContent(visibleText)));
+            }
+
+            for (const part of parts) {
+              if (!part.functionCall) continue;
+              hasToolCalls = true;
+              const callId = encodeToolCallId(part.thoughtSignature as string | undefined);
+              await writer.write(
+                session.toolCallStartChunk(
+                  toolCallIndex,
+                  callId,
+                  part.functionCall.name || ''
+                )
+              );
+              await writer.write(
+                session.toolCallArgsChunk(
+                  toolCallIndex,
+                  JSON.stringify(part.functionCall.args || {})
+                )
+              );
+              toolCallIndex++;
+            }
+          } else if (chunk.text) {
+            await writer.write(session.textChunk(formatter.pushContent(chunk.text)));
           }
         }
 
+        const closing = formatter.finish();
+        if (closing) await writer.write(session.textChunk(closing));
         await writer.write(session.finishChunk(hasToolCalls ? 'tool_calls' : 'stop'));
         await writer.write(session.done());
       } catch (error) {
         console.error('[GoogleProvider] Stream error:', error);
+        const message = error instanceof Error ? error.message : 'Google stream failed';
         try {
-          await writer.write(session.finishChunk('stop'));
+          await writer.write(
+            new TextEncoder().encode(
+              `data: ${JSON.stringify({ error: { message, type: 'provider_stream_error' } })}\n\n`
+            )
+          );
           await writer.write(session.done());
         } catch {
-          // Writer already closed
+          // Downstream may have cancelled.
         }
       } finally {
         try {
           await writer.close();
         } catch {
-          // Already closed
+          // Already closed.
         }
       }
     })();
@@ -189,33 +279,31 @@ export class GoogleProvider extends BaseProvider {
 
   /**
    * Convert OpenAI messages to Google GenAI Content format.
-   * Preserves thought signatures from encoded tool call IDs.
+   * Preserves Gemini thought signatures from encoded tool call IDs.
    */
   private convertMessages(messages: OpenAIMessage[]): {
     systemInstruction?: string;
     contents: Content[];
   } {
-    let systemInstruction: string | undefined;
+    const systemParts: string[] = [];
     const contents: Content[] = [];
 
-    // Build tool_call_id → function_name lookup map
     const toolCallNameMap = new Map<string, string>();
-    for (const m of messages) {
-      if (m.tool_calls) {
-        for (const tc of m.tool_calls) {
-          toolCallNameMap.set(tc.id, tc.function.name);
-        }
+    for (const message of messages) {
+      for (const toolCall of message.tool_calls || []) {
+        toolCallNameMap.set(toolCall.id, toolCall.function.name);
       }
     }
 
     for (const msg of messages) {
       if (msg.role === 'system') {
-        systemInstruction =
+        const text =
           typeof msg.content === 'string'
-            ? msg.content || ''
+            ? msg.content
             : msg.content
-              ? msg.content.map((p) => (p.type === 'text' ? p.text : '')).join(' ')
+              ? msg.content.map((part) => (part.type === 'text' ? part.text : '')).join(' ')
               : '';
+        if (text) systemParts.push(text);
       } else if (msg.role === 'user') {
         const parts: Part[] = [];
         if (typeof msg.content === 'string') {
@@ -224,8 +312,7 @@ export class GoogleProvider extends BaseProvider {
           for (const part of msg.content) {
             if (part.type === 'text') {
               parts.push({ text: part.text });
-            } else if (part.type === 'image_url') {
-              // Parse data URI to extract mime type and base64 data
+            } else if (part.type === 'image_url' && part.image_url.url.startsWith('data:')) {
               const dataUri = part.image_url.url;
               const commaIdx = dataUri.indexOf(',');
               if (commaIdx !== -1) {
@@ -233,16 +320,12 @@ export class GoogleProvider extends BaseProvider {
                 const base64Data = dataUri.slice(commaIdx + 1);
                 const mimeMatch = header.match(/^data:([^;]+)/);
                 const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
-                parts.push({
-                  inlineData: { mimeType, data: base64Data },
-                } as Part);
+                parts.push({ inlineData: { mimeType, data: base64Data } } as Part);
               }
             }
           }
         }
-        if (parts.length > 0) {
-          contents.push({ role: 'user', parts });
-        }
+        if (parts.length > 0) contents.push({ role: 'user', parts });
       } else if (msg.role === 'assistant') {
         const parts: Part[] = [];
 
@@ -251,40 +334,31 @@ export class GoogleProvider extends BaseProvider {
             parts.push({ text: msg.content });
           } else {
             for (const part of msg.content) {
-              if (part.type === 'text') {
-                parts.push({ text: part.text });
-              }
+              if (part.type === 'text') parts.push({ text: part.text });
             }
           }
         }
 
-        if (msg.tool_calls) {
-          for (const toolCall of msg.tool_calls) {
-            const part: Record<string, unknown> = {
-              functionCall: {
-                name: toolCall.function.name,
-                args: JSON.parse(toolCall.function.arguments),
-              },
-            };
-            // Restore thought signature from encoded tool call ID
-            const sig = decodeThoughtSignature(toolCall.id);
-            if (sig) {
-              part.thoughtSignature = sig;
-            }
-            parts.push(part as Part);
-          }
+        for (const toolCall of msg.tool_calls || []) {
+          const part: Record<string, unknown> = {
+            functionCall: {
+              name: toolCall.function.name,
+              args: parseToolArguments(toolCall.function.arguments),
+            },
+          };
+          const signature = decodeThoughtSignature(toolCall.id);
+          if (signature) part.thoughtSignature = signature;
+          parts.push(part as Part);
         }
 
-        if (parts.length > 0) {
-          contents.push({ role: 'model', parts });
-        }
+        if (parts.length > 0) contents.push({ role: 'model', parts });
       } else if (msg.role === 'tool') {
         const functionName = toolCallNameMap.get(msg.tool_call_id || '');
         const toolContent =
           typeof msg.content === 'string'
             ? msg.content || ''
             : msg.content
-              ? msg.content.map((p) => (p.type === 'text' ? p.text : '')).join(' ')
+              ? msg.content.map((part) => (part.type === 'text' ? part.text : '')).join(' ')
               : '';
 
         contents.push({
@@ -301,6 +375,9 @@ export class GoogleProvider extends BaseProvider {
       }
     }
 
-    return { systemInstruction, contents };
+    return {
+      systemInstruction: systemParts.length > 0 ? systemParts.join('\n\n') : undefined,
+      contents,
+    };
   }
 }
