@@ -144,13 +144,28 @@ export class CloudflareAIProvider extends BaseProvider {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const emitPayload = async (payload: any): Promise<void> => {
         if (!payload || typeof payload !== 'object') return;
+        if (payload.error) {
+          const providerMessage =
+            typeof payload.error === 'string'
+              ? payload.error
+              : typeof payload.error.message === 'string'
+                ? payload.error.message
+                : 'Cloudflare AI returned a provider error';
+          throw new Error(providerMessage);
+        }
+
+        const recognized =
+          typeof payload.response === 'string' ||
+          (Array.isArray(payload.choices) && payload.choices.length > 0) ||
+          (Array.isArray(payload.tool_calls) && payload.tool_calls.length > 0);
+        if (!recognized) throw new Error('Cloudflare AI returned an unsupported stream payload');
 
         const rootFormatter = formatterFor(0);
         const rootReasoning = extractReasoningText(
           payload.reasoning_content,
           payload.reasoning,
-          payload.thinking
-        );
+          payload.thinking,
+          payload.reasoning_details        );
         if (rootReasoning)
           await writer.write(session.textChunk(rootFormatter.pushReasoning(rootReasoning)));
 
