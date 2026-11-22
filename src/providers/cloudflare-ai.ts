@@ -180,22 +180,27 @@ export class CloudflareAIProvider extends BaseProvider {
               for (const call of calls) {
                 const callIndex = Number.isInteger(call.index) ? call.index : 0;
                 const fn = call.function ?? {};
-                let callId = toolCallIds.get(callIndex);
+                let callId: string | undefined = toolCallIds.get(callIndex);
 
                 if (!callId) {
-                  callId = call.id || `call_${generateId(24)}`;
+                  callId =
+                    typeof call.id === 'string' && call.id
+                      ? call.id
+                      : `call_${generateId(24)}`;
                   toolCallIds.set(callIndex, callId);
                 }
 
-                if (!startedToolCalls.has(callIndex) && (call.id || fn.name)) {
+                const functionName = typeof fn.name === 'string' ? fn.name : '';
+                if (!startedToolCalls.has(callIndex) && (call.id || functionName)) {
                   startedToolCalls.add(callIndex);
                   await writer.write(
-                    session.toolCallStartChunk(callIndex, callId, fn.name || '')
+                    session.toolCallStartChunk(callIndex, callId, functionName)
                   );
                 }
 
-                if (typeof fn.arguments === 'string' && fn.arguments.length > 0) {
-                  await writer.write(session.toolCallArgsChunk(callIndex, fn.arguments));
+                const argumentsDelta = fn.arguments;
+                if (typeof argumentsDelta === 'string' && argumentsDelta.length > 0) {
+                  await writer.write(session.toolCallArgsChunk(callIndex, argumentsDelta));
                 }
               }
             }
