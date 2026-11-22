@@ -44,14 +44,6 @@ export default {
         });
       }
 
-      if ((path === '/models' || path === '/v1/models') && request.method === 'GET') {
-        const router = new Router(env);
-        return json({
-          object: 'list',
-          data: router.getAvailableModels(),
-        });
-      }
-
       if (!env.PROXY_AUTH_TOKEN || !env.PROXY_AUTH_TOKEN.trim()) {
         throw new ProxyError(
           'Proxy authentication is not configured on this Worker',
@@ -62,6 +54,14 @@ export default {
 
       if (!verifyAuth(request, env)) {
         throw new ProxyError('Unauthorized', 401, 'invalid_auth');
+      }
+
+      if ((path === '/models' || path === '/v1/models') && request.method === 'GET') {
+        const router = new Router(env);
+        return json({
+          object: 'list',
+          data: router.getAvailableModels(),
+        });
       }
 
       if (
@@ -337,8 +337,52 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
   if (body.stream !== undefined && typeof body.stream !== 'boolean') {
     throw new ProxyError('stream must be a boolean', 400, 'invalid_request');
   }
-  if (body.tools !== undefined && !Array.isArray(body.tools)) {
-    throw new ProxyError('tools must be an array', 400, 'invalid_request');
+  if (body.top_k !== undefined && (typeof body.top_k !== 'number' || !Number.isFinite(body.top_k))) {
+    throw new ProxyError('top_k must be a finite number', 400, 'invalid_request');
+  }
+  if (
+    body.stop !== undefined &&
+    typeof body.stop !== 'string' &&
+    (!Array.isArray(body.stop) || !body.stop.every((item) => typeof item === 'string'))
+  ) {
+    throw new ProxyError('stop must be a string or an array of strings', 400, 'invalid_request');
+  }
+  if (body.tools !== undefined) {
+    if (!Array.isArray(body.tools)) {
+      throw new ProxyError('tools must be an array', 400, 'invalid_request');
+    }
+    for (let index = 0; index < body.tools.length; index++) {
+      const tool = body.tools[index];
+      const fn = tool && typeof tool === 'object' ? (tool as Record<string, unknown>).function : null;
+      if (
+        !tool ||
+        typeof tool !== 'object' ||
+        (tool as Record<string, unknown>).type !== 'function' ||
+        !fn ||
+        typeof fn !== 'object' ||
+        typeof (fn as Record<string, unknown>).name !== 'string' ||
+        !(fn as Record<string, unknown>).name
+      ) {
+        throw new ProxyError(`Invalid function tool at index ${index}`, 400, 'invalid_request');
+      }
+      const parameters = (fn as Record<string, unknown>).parameters;
+      if (parameters !== undefined && (!parameters || typeof parameters !== 'object' || Array.isArray(parameters))) {
+        throw new ProxyError(`Tool parameters at index ${index} must be an object schema`, 400, 'invalid_request');
+      }
+    }
+  }
+  if (
+    body.tool_choice !== undefined &&
+    body.tool_choice !== 'auto' &&
+    body.tool_choice !== 'none' &&
+    body.tool_choice !== 'required' &&
+    (!body.tool_choice ||
+      typeof body.tool_choice !== 'object' ||
+      (body.tool_choice as Record<string, unknown>).type !== 'function' ||
+      !(body.tool_choice as Record<string, unknown>).function ||
+      typeof (body.tool_choice as { function?: { name?: unknown } }).function?.name !== 'string')
+  ) {
+    throw new ProxyError('tool_choice has an invalid value', 400, 'invalid_request');
   }
 
   return body as unknown as OpenAIChatRequest;
@@ -389,10 +433,21 @@ function verifyAuth(request: Request, env: Env): boolean {
   const authorization = request.headers.get('Authorization') || '';
   const bearerMatch = authorization.match(/^Bearer\s+(.+)$/i);
   const authorizationToken = bearerMatch ? bearerMatch[1].trim() : authorization.trim();
-  if (authorizationToken && authorizationToken === expectedToken) return true;
+  if (authorizationToken && constantTimeEqual(authorizationToken, expectedToken)) return true;
 
   const apiKey = request.headers.get('x-api-key');
-  return Boolean(apiKey && apiKey === expectedToken);
+  return Boolean(apiKey && constantTimeEqual(apiKey, expectedToken));
+}
+
+function constantTimeEqual(left: string, right: string): boolean {
+  const length = Math.max(left.length, right.length);
+  let mismatch = left.length ^ right.length;
+
+  for (let index = 0; index < length; index++) {
+    mismatch |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+  }
+
+  return mismatch === 0;
 }
 
 function resolveApiKeys(config: ProviderConfig, env: Env): string[] {
