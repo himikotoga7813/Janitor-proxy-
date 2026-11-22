@@ -33,7 +33,7 @@ jobs:
       - name: Format audit branch sources
         if: github.ref == 'refs/heads/audit/full-proxy-hardening'
         run: |
-          npm audit fix
+          npm audit fix --audit-level=high
           npx prettier --write "src/**/*.ts" "tests/**/*.cjs" package.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
