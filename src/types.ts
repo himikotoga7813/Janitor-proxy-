@@ -64,6 +64,7 @@ export interface OpenAIChatRequest {
   tools?: Tool[];
   tool_choice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
   top_p?: number;
+  top_k?: number;
   frequency_penalty?: number;
   presence_penalty?: number;
   stop?: string | string[];
