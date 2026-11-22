@@ -255,7 +255,7 @@ const messages = this.convertMessages(request.messages);
 
             const calls = delta.tool_calls;
             if (Array.isArray(calls) && calls.length > 0) {
-              hasToolCalls = true;
+              toolCallChoices.add(index);
               for (const call of calls) {
                 const callIndex = Number.isInteger(call.index) ? call.index : 0;
                 const fn = call.function ?? {};
