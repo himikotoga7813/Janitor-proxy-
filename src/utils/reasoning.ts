@@ -1,38 +1,49 @@
 /**
- * Normalizes provider-specific reasoning into the OpenAI-compatible message content.
- *
- * Reasoning is only emitted when the upstream provider explicitly supplies it.
- * Opaque thought signatures and other metadata are never treated as reasoning text.
+ * Normalizes provider-specific reasoning into OpenAI-compatible assistant content.
+ * Only explicit human-readable thought text is exposed; signatures and opaque metadata are not.
  */
 export function extractReasoningText(...values: unknown[]): string {
   const parts: string[] = [];
 
-  for (const value of values) {
-    if (typeof value === 'string' && value.length > 0) {
-      parts.push(value);
-    } else if (Array.isArray(value)) {
-      for (const item of value) {
-        if (typeof item === 'string' && item.length > 0) {
-          parts.push(item);
-        } else if (
-          item &&
-          typeof item === 'object' &&
-          typeof (item as Record<string, unknown>).text === 'string'
-        ) {
-          parts.push((item as Record<string, string>).text);
-        }
-      }
-    } else if (value && typeof value === 'object') {
-      const record = value as Record<string, unknown>;
-      if (typeof record.text === 'string') parts.push(record.text);
-      else if (typeof record.content === 'string') parts.push(record.content);
-    }
-  }
+  const visit = (value: unknown, depth: number): void => {
+    if (depth > 4 || value === null || value === undefined) return;
 
+    if (typeof value === 'string') {
+      if (value.length > 0) parts.push(value);
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, depth + 1);
+      return;
+    }
+
+    if (typeof value !== 'object') return;
+    const record = value as Record<string, unknown>;
+
+    // Accept documented text-bearing reasoning representations only.
+    if (typeof record.text === 'string') {
+      visit(record.text, depth + 1);
+      return;
+    }
+    if (typeof record.thinking === 'string') {
+      visit(record.thinking, depth + 1);
+      return;
+    }
+    if (typeof record.summary === 'string') {
+      visit(record.summary, depth + 1);
+      return;
+    }
+    if (typeof record.content === 'string') {
+      visit(record.content, depth + 1);
+    }
+  };
+
+  for (const value of values) visit(value, 0);
   return parts.join('');
 }
 
-/** Stateful formatter used for streams where reasoning and final text arrive separately. */
+/** Stateful formatter for streams where reasoning and final text arrive separately. */
 export class ReasoningStreamFormatter {
   private opened = false;
 
@@ -50,7 +61,6 @@ export class ReasoningStreamFormatter {
     return `\n</think>\n${text}`;
   }
 
-  /** Closes a reasoning block if the stream ends before final content starts. */
   finish(): string {
     if (!this.opened) return '';
     this.opened = false;
@@ -59,8 +69,8 @@ export class ReasoningStreamFormatter {
 }
 
 /**
- * Convert a non-streaming OpenAI-compatible assistant message.
- * The upstream-only reasoning fields are removed after being represented in content.
+ * Normalize one non-streaming assistant message without discarding multimodal content.
+ * For block content, the reasoning prefix is inserted as a text block before the original blocks.
  */
 export function normalizeAssistantMessage(message: unknown): unknown {
   if (!message || typeof message !== 'object' || Array.isArray(message)) return message;
@@ -69,27 +79,27 @@ export function normalizeAssistantMessage(message: unknown): unknown {
   const reasoning = extractReasoningText(
     source.reasoning_content,
     source.reasoning,
-    source.thinking
+    source.thinking,
+    source.reasoning_details
   );
-  const formatter = new ReasoningStreamFormatter();
-  const reasoningPrefix = reasoning ? formatter.pushReasoning(reasoning) : '';
-  const content =
-    typeof source.content === 'string'
-      ? source.content
-      : source.content === null || source.content === undefined
-        ? ''
-        : '';
-
-  const normalizedContent = reasoningPrefix
-    ? reasoningPrefix + formatter.pushContent(content) + formatter.finish()
-    : source.content;
 
   const normalized: Record<string, unknown> = { ...source };
   delete normalized.reasoning_content;
   delete normalized.reasoning;
   delete normalized.thinking;
+  delete normalized.reasoning_details;
 
-  if (reasoningPrefix) normalized.content = normalizedContent;
+  if (!reasoning) return normalized;
+
+  const prefix = `<think>\n${reasoning}\n</think>\n`;
+  if (typeof source.content === 'string') {
+    normalized.content = prefix + source.content;
+  } else if (Array.isArray(source.content)) {
+    normalized.content = [{ type: 'text', text: prefix }, ...source.content];
+  } else {
+    normalized.content = prefix;
+  }
+
   return normalized;
 }
 
