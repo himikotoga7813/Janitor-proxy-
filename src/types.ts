@@ -16,7 +16,7 @@ export interface ImageContentPart {
 export type ContentPart = TextContentPart | ImageContentPart;
 
 export interface OpenAIMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool' | 'function';
+  role: 'system' | 'developer' | 'user' | 'assistant' | 'tool' | 'function';
   content: string | ContentPart[] | null;
   name?: string;
   tool_calls?: ToolCall[];
@@ -24,6 +24,7 @@ export interface OpenAIMessage {
   /** Provider-specific reasoning fields; normalized into content when present. */
   reasoning_content?: string;
   reasoning?: string;
+  reasoning_details?: unknown;
 }
 
 export interface ToolCall {
