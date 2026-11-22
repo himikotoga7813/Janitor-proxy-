@@ -398,7 +398,7 @@ export class CloudflareAIProvider extends BaseProvider {
       }
 
       const converted: Record<string, unknown> = {
-        role: msg.role,
+        role: msg.role === 'developer' ? 'system' : msg.role,
         content: msg.content ?? '',
       };
 
