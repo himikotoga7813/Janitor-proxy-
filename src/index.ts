@@ -80,7 +80,7 @@ export default {
 
       throw new ProxyError('Not found', 404, 'not_found');
     } catch (error) {
-      console.error('[Worker] Request failed:', error);
+      console.error('[Worker] Request failed:', error instanceof Error ? error.message : 'Unknown error');
       const errorResponse = createErrorResponse(error);
       const headers = new Headers(errorResponse.headers);
       for (const [key, value] of Object.entries(CORS_HEADERS)) {
