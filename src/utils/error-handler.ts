@@ -49,6 +49,7 @@ export function getErrorStatusCode(error: unknown): number | undefined {
 }
 
 export function isRateLimitError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
   const e = error as ErrorLike;
   return (
     e.status === 429 ||
@@ -60,6 +61,7 @@ export function isRateLimitError(error: unknown): boolean {
 }
 
 export function isRetryableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
   const e = error as ErrorLike;
   const status = getErrorStatusCode(error);
   return (
