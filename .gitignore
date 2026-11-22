@@ -30,3 +30,6 @@ yarn-error.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Potentially sensitive local configuration
+/PRIVATE_CONFIG.md
