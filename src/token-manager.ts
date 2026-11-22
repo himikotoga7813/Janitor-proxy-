@@ -19,7 +19,18 @@ export class TokenManager {
     const apiKeys = this.getApiKeys();
 
     if (this.config.provider === 'cloudflare-ai') {
-      return provider.chat(request, '');
+      try {
+        return await withTimeout(
+          provider.chat(request, ''),
+          getProviderTimeoutMs(this.env)
+        );
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Cloudflare AI request failed',
+          statusCode: getErrorStatusCode(error) || 502,
+        };
+      }
     }
 
     if (apiKeys.length === 0) {
