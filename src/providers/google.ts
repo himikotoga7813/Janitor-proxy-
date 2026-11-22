@@ -42,7 +42,11 @@ function parseToolArguments(value: string): Record<string, unknown> {
       ? (parsed as Record<string, unknown>)
       : {};
   } catch {
-    return {};
+    throw new ProxyError(
+      'Tool call arguments must contain valid JSON.',
+      400,
+      'invalid_tool_arguments'
+    );
   }
 }
 
@@ -301,7 +305,18 @@ export class GoogleProvider extends BaseProvider {
           typeof msg.content === 'string'
             ? msg.content
             : msg.content
-              ? msg.content.map((part) => (part.type === 'text' ? part.text : '')).join(' ')
+              ? msg.content
+                  .map((part) => {
+                    if (part.type !== 'text') {
+                      throw new ProxyError(
+                        'Google system messages support text content only.',
+                        501,
+                        'unsupported_content_part'
+                      );
+                    }
+                    return part.text;
+                  })
+                  .join(' ')
               : '';
         if (text) systemParts.push(text);
       } else if (msg.role === 'user') {
@@ -316,19 +331,24 @@ export class GoogleProvider extends BaseProvider {
               if (!part.image_url.url.startsWith('data:')) {
                 throw new ProxyError(
                   'Google provider image inputs must use a base64 data URL; remote URLs are not fetched by the proxy.',
-                  400,
+                  501,
                   'unsupported_image_source'
                 );
               }
               const dataUri = part.image_url.url;
               const commaIdx = dataUri.indexOf(',');
-              if (commaIdx !== -1) {
-                const header = dataUri.slice(0, commaIdx);
-                const base64Data = dataUri.slice(commaIdx + 1);
-                const mimeMatch = header.match(/^data:([^;]+)/);
-                const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
-                parts.push({ inlineData: { mimeType, data: base64Data } } as Part);
+              const base64Data = dataUri.slice(commaIdx + 1);
+              if (commaIdx === -1 || !base64Data) {
+                throw new ProxyError(
+                  'Google image input contains an invalid base64 data URL.',
+                  400,
+                  'invalid_image_data'
+                );
               }
+              const header = dataUri.slice(0, commaIdx);
+              const mimeMatch = header.match(/^data:([^;]+)/);
+              const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+              parts.push({ inlineData: { mimeType, data: base64Data } } as Part);
             } else {
               throw new ProxyError(
                 `Google provider does not support content part type: ${String((part as { type?: unknown }).type)}`,
@@ -347,7 +367,14 @@ export class GoogleProvider extends BaseProvider {
             parts.push({ text: msg.content });
           } else {
             for (const part of msg.content) {
-              if (part.type === 'text') parts.push({ text: part.text });
+              if (part.type !== 'text') {
+                throw new ProxyError(
+                  'Google assistant messages support text content and function calls only.',
+                  501,
+                  'unsupported_content_part'
+                );
+              }
+              parts.push({ text: part.text });
             }
           }
         }
@@ -371,7 +398,18 @@ export class GoogleProvider extends BaseProvider {
           typeof msg.content === 'string'
             ? msg.content || ''
             : msg.content
-              ? msg.content.map((part) => (part.type === 'text' ? part.text : '')).join(' ')
+              ? msg.content
+                  .map((part) => {
+                    if (part.type !== 'text') {
+                      throw new ProxyError(
+                        'Google tool results support text content only.',
+                        501,
+                        'unsupported_content_part'
+                      );
+                    }
+                    return part.text;
+                  })
+                  .join(' ')
               : '';
 
         contents.push({
