@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20+ installed
+- Node.js 22+ installed
 - Cloudflare account
 - API keys for the AI providers you want to use
 
@@ -51,7 +51,7 @@ GOOGLE_KEY_1=AIzaxxxxx
 OPENAI_KEY_1=sk-xxxxx
 ```
 
-For production, use Wrangler secrets:
+For production, store the proxy token and every provider API key as Wrangler Secrets (not plain variables):
 
 ```bash
 wrangler secret put PROXY_AUTH_TOKEN
@@ -86,7 +86,7 @@ npm run deploy
 
 ### 6. Set Up GitHub Actions (Optional)
 
-For automatic deployment on push to main:
+For automatic deployment on push to main (the deploy workflow runs read-only checks and deploys; it does not push formatting commits):
 
 1. Go to your Cloudflare dashboard
 2. Get your API token: https://dash.cloudflare.com/profile/api-tokens
