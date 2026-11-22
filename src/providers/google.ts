@@ -67,6 +67,26 @@ export class GoogleProvider extends BaseProvider {
           'unsupported_candidate_count'
         );
       }
+      const unsupportedOptions = [
+        'logprobs',
+        'top_logprobs',
+        'user',
+        'parallel_tool_calls',
+        'stream_options',
+        'reasoning_effort',
+        'verbosity',
+      ] as const;
+      const unsupportedOption = unsupportedOptions.find(
+        (key) => request[key] !== undefined
+      );
+      if (unsupportedOption) {
+        throw new ProxyError(
+          `Google provider does not support the "${unsupportedOption}" chat option through this adapter.`,
+          501,
+          'unsupported_request_option'
+        );
+      }
+
       const ai = new GoogleGenAI({ apiKey });
 
       const { systemInstruction, contents } = this.convertMessages(request.messages);
@@ -98,6 +118,36 @@ export class GoogleProvider extends BaseProvider {
       }
       if (request.presence_penalty !== undefined) {
         config.presencePenalty = request.presence_penalty;
+      }
+      if (request.seed !== undefined) config.seed = request.seed;
+      if (request.response_format !== undefined) {
+        const formatType = request.response_format.type;
+        if (formatType === 'json_object') {
+          config.responseMimeType = 'application/json';
+        } else if (
+          formatType === 'json_schema' &&
+          request.response_format.json_schema &&
+          typeof request.response_format.json_schema === 'object'
+        ) {
+          const schema = (
+            request.response_format.json_schema as Record<string, unknown>
+          ).schema;
+          if (!schema || typeof schema !== 'object') {
+            throw new ProxyError(
+              'Google json_schema response_format requires a schema object.',
+              400,
+              'invalid_response_format'
+            );
+          }
+          config.responseMimeType = 'application/json';
+          config.responseSchema = schema;
+        } else {
+          throw new ProxyError(
+            'Google supports response_format types json_object and json_schema only.',
+            501,
+            'unsupported_response_format'
+          );
+        }
       }
       if (request.stop) {
         config.stopSequences = Array.isArray(request.stop) ? request.stop : [request.stop];
