@@ -1,4 +1,5 @@
 import { BaseProvider } from './base';
+import { ProxyError } from '../utils/error-handler';
 import { OpenAIChatRequest, ProviderResponse, OpenAIMessage, Tool, ToolCall } from '../types';
 import { createOpenAIResponse, StreamSession, generateId } from '../utils/response-mapper';
 import {
