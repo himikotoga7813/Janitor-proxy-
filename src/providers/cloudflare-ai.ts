@@ -22,7 +22,28 @@ export class CloudflareAIProvider extends BaseProvider {
         throw new Error('Cloudflare AI binding not available');
       }
 
-      const messages = this.convertMessages(request.messages);
+            const unsupportedOptions = [
+        'response_format',
+        'seed',
+        'logprobs',
+        'top_logprobs',
+        'user',
+        'stream_options',
+        'reasoning_effort',
+        'verbosity',
+      ] as const;
+      const unsupportedOption = unsupportedOptions.find(
+        (key) => request[key] !== undefined
+      );
+      if (unsupportedOption) {
+        throw new ProxyError(
+          `Cloudflare AI adapter does not support the "${unsupportedOption}" chat option.`,
+          501,
+          'unsupported_request_option'
+        );
+      }
+
+const messages = this.convertMessages(request.messages);
 
       // Forward common OpenAI-compatible generation and tool options.
       const params: Record<string, unknown> = {
@@ -40,6 +61,7 @@ export class CloudflareAIProvider extends BaseProvider {
         'tool_choice',
         'n',
         'parallel_tool_calls',
+        'top_k',
       ] as const;
 
       for (const key of supportedOptions) {
