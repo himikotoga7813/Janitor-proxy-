@@ -4,6 +4,7 @@ import { AnthropicRequest } from '../anthropic-types';
 import { OpenAIChatRequest, ProviderResponse, OpenAIMessage, ToolCall } from '../types';
 import { createOpenAIResponse, StreamSession } from '../utils/response-mapper';
 import { ReasoningStreamFormatter } from '../utils/reasoning';
+import { ProxyError } from '../utils/error-handler';
 
 export class AnthropicProvider extends BaseProvider {
   async chat(request: OpenAIChatRequest, apiKey: string): Promise<ProviderResponse> {
@@ -294,7 +295,14 @@ export class AnthropicProvider extends BaseProvider {
           for (const part of msg.content) {
             if (part.type === 'text') {
               content.push({ type: 'text', text: part.text });
-            } else if (part.type === 'image_url' && part.image_url.url.startsWith('data:')) {
+            } else if (part.type === 'image_url') {
+              if (!part.image_url.url.startsWith('data:')) {
+                throw new ProxyError(
+                  'Anthropic-compatible image inputs must use a base64 data URL; remote URLs are not fetched by the proxy.',
+                  400,
+                  'unsupported_image_source'
+                );
+              }
               const dataUri = part.image_url.url;
               const commaIdx = dataUri.indexOf(',');
               if (commaIdx !== -1) {
