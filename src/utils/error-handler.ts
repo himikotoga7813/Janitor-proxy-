@@ -10,38 +10,24 @@ export class ProxyError extends Error {
 }
 
 export function createErrorResponse(error: unknown): Response {
-  if (error instanceof ProxyError) {
-    return new Response(
-      JSON.stringify({
-        error: {
-          message: error.message,
-          type: 'proxy_error',
-          code: error.code,
-        },
-      }),
-      {
-        status: error.statusCode,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-  }
+  const isProxyError = error instanceof ProxyError;
+  const statusCode = isProxyError
+    ? error.statusCode
+    : getErrorStatusCode(error) || 500;
+  const message =
+    error instanceof Error ? error.message : 'Unknown error occurred';
 
-  // Generic error
-  const message = error instanceof Error ? error.message : 'Unknown error occurred';
   return new Response(
     JSON.stringify({
       error: {
         message,
-        type: 'internal_error',
+        type: isProxyError ? 'proxy_error' : 'internal_error',
+        ...(isProxyError && error.code ? { code: error.code } : {}),
       },
     }),
     {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      status: statusCode,
+      headers: { 'Content-Type': 'application/json' },
     }
   );
 }
@@ -53,50 +39,71 @@ interface ErrorLike {
   code?: string;
 }
 
+export function getErrorStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const e = error as ErrorLike;
+  const candidate = e.statusCode ?? e.status;
+  return typeof candidate === 'number' && candidate >= 400 && candidate <= 599
+    ? candidate
+    : undefined;
+}
+
 export function isRateLimitError(error: unknown): boolean {
   const e = error as ErrorLike;
   return (
     e.status === 429 ||
     e.statusCode === 429 ||
-    (typeof e.message === 'string' && e.message.toLowerCase().includes('rate limit')) ||
+    (typeof e.message === 'string' &&
+      /rate.?limit|too many requests/i.test(e.message)) ||
     e.code === 'rate_limit_exceeded'
   );
 }
 
 export function isRetryableError(error: unknown): boolean {
   const e = error as ErrorLike;
+  const status = getErrorStatusCode(error);
   return (
     isRateLimitError(error) ||
-    e.status === 503 ||
-    e.statusCode === 503 ||
-    e.status === 502 ||
-    e.statusCode === 502 ||
-    (typeof e.message === 'string' && e.message.toLowerCase().includes('timeout')) ||
-    (typeof e.message === 'string' && e.message.toLowerCase().includes('overloaded'))
+    [408, 425, 500, 502, 503, 504, 529].includes(status || 0) ||
+    (typeof e.message === 'string' &&
+      /timeout|timed out|overloaded|temporarily unavailable|network error|fetch failed|connection reset/i.test(
+        e.message
+      ))
   );
 }
 
-/**
- * Default timeout for external API calls (milliseconds).
- * Cloudflare Workers free plan has a 30s CPU limit — leaving 5s for proxy overhead.
- */
-const PROVIDER_TIMEOUT_MS = 25000;
+/** Default upstream connection/initial-response timeout (milliseconds). */
+const DEFAULT_PROVIDER_TIMEOUT_MS = 120000;
+const MAX_PROVIDER_TIMEOUT_MS = 600000;
+
+/** Read an optional timeout override without allowing zero, NaN, or extreme values. */
+export function getProviderTimeoutMs(env?: { PROVIDER_TIMEOUT_MS?: string }): number {
+  const configured = Number(env?.PROVIDER_TIMEOUT_MS);
+  if (!Number.isFinite(configured) || configured <= 0) {
+    return DEFAULT_PROVIDER_TIMEOUT_MS;
+  }
+  return Math.min(Math.max(Math.floor(configured), 1000), MAX_PROVIDER_TIMEOUT_MS);
+}
 
 /**
- * Wrap a promise with a timeout, throwing on expiry.
- * The underlying operation continues running but its result is discarded.
+ * Wrap the initial provider operation with a timeout.
+ * For streaming APIs this covers connection/stream creation, not the stream's full lifetime.
+ * The underlying operation may continue after timeout if the provider SDK offers no abort hook.
  */
-export function withTimeout<T>(promise: Promise<T>, ms = PROVIDER_TIMEOUT_MS): Promise<T> {
+export function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number = DEFAULT_PROVIDER_TIMEOUT_MS
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`Provider timeout after ${ms}ms`)), ms);
     promise.then(
-      (val) => {
+      (value) => {
         clearTimeout(timer);
-        resolve(val);
+        resolve(value);
       },
-      (err) => {
+      (error) => {
         clearTimeout(timer);
-        reject(err);
+        reject(error);
       }
     );
   });
