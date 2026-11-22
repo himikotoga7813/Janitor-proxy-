@@ -3,7 +3,6 @@ import { OpenAIChatRequest, ProviderResponse, OpenAIMessage, Tool, ToolCall } fr
 import { createOpenAIResponse, StreamSession, generateId } from '../utils/response-mapper';
 import {
   extractReasoningText,
-  normalizeAssistantMessage,
   normalizeOpenAIResponse,
   ReasoningStreamFormatter,
 } from '../utils/reasoning';
