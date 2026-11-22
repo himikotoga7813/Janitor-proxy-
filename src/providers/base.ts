@@ -20,7 +20,7 @@ export abstract class BaseProvider implements AIProvider {
   abstract chat(request: OpenAIChatRequest, apiKey: string): Promise<ProviderResponse>;
 
   protected handleError(error: unknown, context: string): ProviderResponse {
-    console.error(`[${context}] Error:`, error);
+    console.error(`[${context}] Provider request failed:`, getErrorStatusCode(error) || 500);
 
     const message =
       error instanceof Error
