@@ -154,18 +154,20 @@ export class CloudflareAIProvider extends BaseProvider {
           throw new Error(providerMessage);
         }
 
-        const recognized =
-          typeof payload.response === 'string' ||
-          (Array.isArray(payload.choices) && payload.choices.length > 0) ||
-          (Array.isArray(payload.tool_calls) && payload.tool_calls.length > 0);
-        if (!recognized) throw new Error('Cloudflare AI returned an unsupported stream payload');
-
-        const rootFormatter = formatterFor(0);
         const rootReasoning = extractReasoningText(
           payload.reasoning_content,
           payload.reasoning,
           payload.thinking,
-          payload.reasoning_details        );
+          payload.reasoning_details
+        );
+        const recognized =
+          typeof payload.response === 'string' ||
+          (Array.isArray(payload.choices) && payload.choices.length > 0) ||
+          (Array.isArray(payload.tool_calls) && payload.tool_calls.length > 0) ||
+          Boolean(rootReasoning);
+        if (!recognized) throw new Error('Cloudflare AI returned an unsupported stream payload');
+
+        const rootFormatter = formatterFor(0);
         if (rootReasoning)
           await writer.write(session.textChunk(rootFormatter.pushReasoning(rootReasoning)));
 
@@ -232,25 +234,30 @@ export class CloudflareAIProvider extends BaseProvider {
               for (const call of calls) {
                 const callIndex = Number.isInteger(call.index) ? call.index : 0;
                 const fn = call.function ?? {};
-                const existingCallId = toolCallIds.get(callIndex);
+                const toolKey = `${index}:${callIndex}`;
+                const existingCallId = toolCallIds.get(toolKey);
                 const generatedCallId =
                   typeof call.id === 'string' && call.id.length > 0
                     ? call.id
                     : `call_${generateId(24)}`;
                 const callId: string = existingCallId || generatedCallId;
-                toolCallIds.set(callIndex, callId);
+                toolCallIds.set(toolKey, callId);
 
                 const functionName: string = typeof fn.name === 'string' ? fn.name : '';
-                if (!startedToolCalls.has(callIndex) && (call.id || functionName)) {
-                  startedToolCalls.add(callIndex);
+                if (!startedToolCalls.has(toolKey) && (call.id || functionName)) {
+                  startedToolCalls.add(toolKey);
+                  await ensureChoiceStarted(index);
                   await writer.write(
-                    session.toolCallStartChunk(callIndex, String(callId), functionName)
+                    session.toolCallStartChunk(callIndex, callId, functionName, index)
                   );
                 }
 
                 const argumentsDelta: string = typeof fn.arguments === 'string' ? fn.arguments : '';
                 if (argumentsDelta.length > 0) {
-                  await writer.write(session.toolCallArgsChunk(callIndex, String(argumentsDelta)));
+                  await ensureChoiceStarted(index);
+                  await writer.write(
+                    session.toolCallArgsChunk(callIndex, argumentsDelta, index)
+                  );
                 }
               }
             }
@@ -269,8 +276,9 @@ export class CloudflareAIProvider extends BaseProvider {
         try {
           await emitPayload(JSON.parse(data));
         } catch (error) {
-          // Malformed SSE must never be forwarded as assistant text.
-          console.warn('[CloudflareAIProvider] Ignoring malformed SSE event:', error);
+          const message =
+            error instanceof Error ? error.message : 'Invalid Cloudflare AI stream event';
+          throw new Error(message);
         }
       };
 
