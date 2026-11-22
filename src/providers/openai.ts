@@ -124,7 +124,10 @@ export class OpenAIProvider extends BaseProvider {
         }
         await writer.write(encoder.encode('data: [DONE]\n\n'));
       } catch (error) {
-        console.error('[OpenAIProvider] Stream error:', error);
+        console.error(
+          '[OpenAIProvider] Stream failed:',
+          error instanceof Error ? error.message : 'Unknown stream error'
+        );
         const message = error instanceof Error ? error.message : 'Upstream stream failed';
         const errorPayload = {
           error: {
