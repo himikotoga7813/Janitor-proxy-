@@ -180,6 +180,8 @@ const clientOpts: Record<string, unknown> = { apiKey };
           if (event.type === 'content_block_start') {
             const block = event.content_block as unknown as Record<string, unknown>;
             if (block.type === 'tool_use') {
+              const closing = formatter.finish();
+              if (closing) await writer.write(session.textChunk(closing));
               toolCallIndex++;
               hasToolCalls = true;
               await writer.write(
@@ -219,7 +221,10 @@ const clientOpts: Record<string, unknown> = { apiKey };
           await writer.write(session.done());
         }
       } catch (error) {
-        console.error('[AnthropicProvider] Stream error:', error);
+        console.error(
+          '[AnthropicProvider] Stream failed:',
+          error instanceof Error ? error.message : 'Unknown stream error'
+        );
         const message = error instanceof Error ? error.message : 'Anthropic stream failed';
         try {
           await writer.write(
