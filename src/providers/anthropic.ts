@@ -9,6 +9,13 @@ import { ProxyError } from '../utils/error-handler';
 export class AnthropicProvider extends BaseProvider {
   async chat(request: OpenAIChatRequest, apiKey: string): Promise<ProviderResponse> {
     try {
+      if (request.n !== undefined && request.n > 1) {
+        throw new ProxyError(
+          'Anthropic provider supports one completion per request; the router may fall back to another configured provider.',
+          501,
+          'unsupported_candidate_count'
+        );
+      }
       const clientOpts: Record<string, unknown> = { apiKey };
       if (this.baseUrl) clientOpts.baseURL = this.baseUrl;
       const client = new Anthropic(clientOpts);
@@ -53,8 +60,8 @@ export class AnthropicProvider extends BaseProvider {
         }
       }
 
-      if (request.stream) return this.handleStream(client, params);
-      return this.handleNonStream(client, params);
+      if (request.stream) return await this.handleStream(client, params);
+      return await this.handleNonStream(client, params);
     } catch (error) {
       return this.handleError(error, 'AnthropicProvider');
     }
@@ -81,13 +88,14 @@ export class AnthropicProvider extends BaseProvider {
       if (request.temperature !== undefined) params.temperature = request.temperature;
       if (request.top_p !== undefined) params.top_p = request.top_p;
       if (request.top_k !== undefined) params.top_k = request.top_k;
+      if (request.top_k !== undefined) params.top_k = request.top_k;
       if (request.stop_sequences) params.stop_sequences = request.stop_sequences;
       if (request.metadata) params.metadata = request.metadata;
       if (request.tools?.length) params.tools = request.tools;
       if (request.tool_choice) params.tool_choice = request.tool_choice;
 
-      if (request.stream) return this.handleNativeStream(client, params);
-      return this.handleNativeNonStream(client, params);
+      if (request.stream) return await this.handleNativeStream(client, params);
+      return await this.handleNativeNonStream(client, params);
     } catch (error) {
       return this.handleError(error, 'AnthropicProvider.nativeChat');
     }
