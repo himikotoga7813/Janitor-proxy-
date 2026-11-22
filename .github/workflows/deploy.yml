@@ -10,58 +10,26 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    name: Lint
+  verify-and-deploy:
+    name: Verify and Deploy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
-      - name: Run ESLint
-        run: pnpm run lint
-
-      - name: Run type check
-        run: pnpm run type-check
-
-      - name: Check formatting
-        run: pnpm exec prettier --check "src/**/*.ts"
-
-  deploy:
-    name: Deploy
-    runs-on: ubuntu-latest
-    needs: lint
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Run all code checks
+        run: npm run check
 
       - name: Validate and inject ROUTES_CONFIG
+        if: github.ref == 'refs/heads/main'
         env:
           ROUTES_CONFIG: ${{ vars.ROUTES_CONFIG }}
         run: |
@@ -78,6 +46,7 @@ jobs:
           } >> wrangler.toml
 
       - name: Deploy to Cloudflare Workers
+        if: github.ref == 'refs/heads/main'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
