@@ -121,7 +121,13 @@ After saving the variable, just go to the **Actions** tab and run the **"Deploy 
 
 ---
 
-## ⏱️ Provider connection timeout\n\nThe default timeout for establishing an upstream response is 120 seconds. You can optionally set `PROVIDER_TIMEOUT_MS` (1,000–600,000 milliseconds) in Worker settings. For streaming requests this timeout covers opening the upstream stream, not its full lifetime. Model context windows, output limits, payload limits, and upstream quotas still apply.\n\n---\n\n## 🚀 How to Use It
+## ⏱️ Provider connection timeout
+
+The default timeout for establishing an upstream response is 120 seconds. You can optionally set `PROVIDER_TIMEOUT_MS` (1,000–600,000 milliseconds) in Worker settings. For streaming requests this timeout covers opening the upstream stream, not its full lifetime. Model context windows, output limits, payload limits, and upstream quotas still apply.
+
+---
+
+## 🚀 How to Use It
 
 Now you can use your proxy URL anywhere you normally use OpenAI.
 
@@ -262,7 +268,7 @@ Push a commit to `main` or manually run the **"Deploy to Cloudflare"** workflow.
 ## 💬 Support
 
 Found a bug? Need help?
-Open an issue in the [GitHub Issues](https://github.com/zxcloli666/AI-Worker-Proxy/issues) tab.
+Open an issue in the [GitHub Issues](https://github.com/himikotoga7813/Janitor-proxy-/issues) tab.
 
 ### ⭐ If this saved you money or time, please drop a Star on the repo! It helps a lot!
 
