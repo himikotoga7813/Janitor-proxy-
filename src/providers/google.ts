@@ -1,5 +1,6 @@
 import { GoogleGenAI, type Content, type Part } from '@google/genai';
 import { BaseProvider } from './base';
+import { ProxyError } from '../utils/error-handler';
 import { OpenAIChatRequest, ProviderResponse, OpenAIMessage, ToolCall } from '../types';
 import { createOpenAIResponse, StreamSession, generateId } from '../utils/response-mapper';
 import {
@@ -312,7 +313,14 @@ export class GoogleProvider extends BaseProvider {
           for (const part of msg.content) {
             if (part.type === 'text') {
               parts.push({ text: part.text });
-            } else if (part.type === 'image_url' && part.image_url.url.startsWith('data:')) {
+            } else if (part.type === 'image_url') {
+              if (!part.image_url.url.startsWith('data:')) {
+                throw new ProxyError(
+                  'Google provider image inputs must use a base64 data URL; remote URLs are not fetched by the proxy.',
+                  400,
+                  'unsupported_image_source'
+                );
+              }
               const dataUri = part.image_url.url;
               const commaIdx = dataUri.indexOf(',');
               if (commaIdx !== -1) {
