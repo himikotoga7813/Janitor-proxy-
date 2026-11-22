@@ -83,7 +83,9 @@ export class GoogleProvider extends BaseProvider {
 
       const config: Record<string, unknown> = {};
       if (request.temperature !== undefined) config.temperature = request.temperature;
-      if (request.max_tokens !== undefined) config.maxOutputTokens = request.max_tokens;
+      if (request.max_tokens !== undefined || request.max_completion_tokens !== undefined) {
+        config.maxOutputTokens = request.max_tokens ?? request.max_completion_tokens;
+      }
       if (request.top_p !== undefined) config.topP = request.top_p;
       if (request.top_k !== undefined) config.topK = request.top_k;
       if (request.n !== undefined) config.candidateCount = request.n;
@@ -327,6 +329,12 @@ export class GoogleProvider extends BaseProvider {
                 const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
                 parts.push({ inlineData: { mimeType, data: base64Data } } as Part);
               }
+            } else {
+              throw new ProxyError(
+                `Google provider does not support content part type: ${String((part as { type?: unknown }).type)}`,
+                501,
+                'unsupported_content_part'
+              );
             }
           }
         }
