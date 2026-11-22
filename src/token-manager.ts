@@ -20,10 +20,7 @@ export class TokenManager {
 
     if (this.config.provider === 'cloudflare-ai') {
       try {
-        return await withTimeout(
-          provider.chat(request, ''),
-          getProviderTimeoutMs(this.env)
-        );
+        return await withTimeout(provider.chat(request, ''), getProviderTimeoutMs(this.env));
       } catch (error) {
         return {
           success: false,
