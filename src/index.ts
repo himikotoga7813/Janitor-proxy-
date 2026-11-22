@@ -226,6 +226,13 @@ async function handleAnthropicConversionPath(
   router: Router,
   overrideProviders?: ProviderConfig[]
 ): Promise<Response> {
+  if (body.thinking?.type === 'enabled') {
+    throw new ProxyError(
+      'Anthropic thinking budgets are only supported when a native Anthropic provider is configured for this model.',
+      501,
+      'unsupported_thinking_option'
+    );
+  }
   const openaiRequest = convertAnthropicRequestToOpenAI(body);
   const response = await router.executeWithFallback(openaiRequest, 'anthropic', overrideProviders);
 
