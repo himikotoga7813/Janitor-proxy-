@@ -154,7 +154,6 @@ const messages = this.convertMessages(request.messages);
     };
 
     (async () => {
-      let hasToolCalls = false;
       const decoder = new TextDecoder();
 
       const ensureChoiceStarted = async (choiceIndex: number): Promise<void> => {
@@ -203,7 +202,7 @@ const messages = this.convertMessages(request.messages);
         }
 
         if (Array.isArray(payload.tool_calls) && payload.tool_calls.length > 0) {
-          hasToolCalls = true;
+          toolCallChoices.add(0);
           for (const tc of payload.tool_calls) {
             const index = nativeToolIndex++;
             const callId = `call_${generateId(24)}`;
@@ -376,14 +375,16 @@ const messages = this.convertMessages(request.messages);
           const finishReason =
             finishReasons.get(choiceIndex) ||
             (toolCallChoices.has(choiceIndex) ||
-            (choiceIndex === 0 && hasToolCalls)
-              ? 'tool_calls'
-              : 'stop');
+            ? 'tool_calls'
+            : 'stop');
           await writer.write(session.finishChunk(finishReason, choiceIndex));
         }
         await writer.write(session.done());
       } catch (error) {
-        console.error('[CloudflareAIProvider] Stream error:', error);
+        console.error(
+          '[CloudflareAIProvider] Stream failed:',
+          error instanceof Error ? error.message : 'Unknown stream error'
+        );
         const message = error instanceof Error ? error.message : 'Cloudflare AI stream failed';
         try {
           await writer.write(
