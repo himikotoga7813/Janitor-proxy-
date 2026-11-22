@@ -292,7 +292,7 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
       throw new ProxyError(`Invalid message at index ${index}`, 400, 'invalid_request');
     }
     const record = message as Record<string, unknown>;
-    if (!['system', 'user', 'assistant', 'tool', 'function'].includes(String(record.role))) {
+    if (!['system', 'developer', 'user', 'assistant', 'tool', 'function'].includes(String(record.role))) {
       throw new ProxyError(`Invalid role in message at index ${index}`, 400, 'invalid_request');
     }
     const content = record.content;
@@ -303,6 +303,71 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
       !Array.isArray(content)
     ) {
       throw new ProxyError(`Invalid content in message at index ${index}`, 400, 'invalid_request');
+    }
+    if (Array.isArray(content)) {
+      for (let partIndex = 0; partIndex < content.length; partIndex++) {
+        const part = content[partIndex];
+        if (!part || typeof part !== 'object' || Array.isArray(part)) {
+          throw new ProxyError(
+            `Invalid content part at message ${index}, part ${partIndex}`,
+            400,
+            'invalid_request'
+          );
+        }
+        const partRecord = part as Record<string, unknown>;
+        if (
+          partRecord.type === 'text' &&
+          typeof partRecord.text === 'string'
+        ) {
+          continue;
+        }
+        if (
+          partRecord.type === 'image_url' &&
+          partRecord.image_url &&
+          typeof partRecord.image_url === 'object' &&
+          typeof (partRecord.image_url as Record<string, unknown>).url === 'string'
+        ) {
+          continue;
+        }
+        throw new ProxyError(
+          `Unsupported content part at message ${index}, part ${partIndex}`,
+          400,
+          'unsupported_content_part'
+        );
+      }
+    }
+    if (record.tool_calls !== undefined) {
+      if (!Array.isArray(record.tool_calls)) {
+        throw new ProxyError(`tool_calls must be an array at message ${index}`, 400, 'invalid_request');
+      }
+      for (let callIndex = 0; callIndex < record.tool_calls.length; callIndex++) {
+        const call = record.tool_calls[callIndex] as Record<string, unknown> | null;
+        const fn = call && typeof call === 'object' ? call.function as Record<string, unknown> | null : null;
+        if (
+          !call ||
+          typeof call !== 'object' ||
+          typeof call.id !== 'string' ||
+          !call.id ||
+          call.type !== 'function' ||
+          !fn ||
+          typeof fn !== 'object' ||
+          typeof fn.name !== 'string' ||
+          !fn.name ||
+          typeof fn.arguments !== 'string'
+        ) {
+          throw new ProxyError(
+            `Invalid tool call at message ${index}, call ${callIndex}`,
+            400,
+            'invalid_tool_call'
+          );
+        }
+      }
+    }
+    if (record.role === 'tool' && typeof record.tool_call_id !== 'string') {
+      throw new ProxyError(`Tool message at index ${index} requires tool_call_id`, 400, 'invalid_request');
+    }
+    if (record.role === 'function' && typeof record.name !== 'string') {
+      throw new ProxyError(`Function message at index ${index} requires name`, 400, 'invalid_request');
     }
   }
 
@@ -322,6 +387,25 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
       body.max_tokens < 1)
   ) {
     throw new ProxyError('max_tokens must be a positive integer', 400, 'invalid_request');
+  }
+  if (
+    body.max_completion_tokens !== undefined &&
+    (typeof body.max_completion_tokens !== 'number' ||
+      !Number.isInteger(body.max_completion_tokens) ||
+      body.max_completion_tokens < 1)
+  ) {
+    throw new ProxyError(
+      'max_completion_tokens must be a positive integer',
+      400,
+      'invalid_request'
+    );
+  }
+  if (body.max_tokens !== undefined && body.max_completion_tokens !== undefined) {
+    throw new ProxyError(
+      'Specify only one of max_tokens or max_completion_tokens.',
+      400,
+      'invalid_request'
+    );
   }
   if (
     body.n !== undefined &&
