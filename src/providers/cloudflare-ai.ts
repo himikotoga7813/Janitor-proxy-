@@ -366,6 +366,7 @@ export class CloudflareAIProvider extends BaseProvider {
           const finishReason =
             finishReasons.get(choiceIndex) ||
             (toolCallChoices.has(choiceIndex) ? 'tool_calls' : 'stop');
+          await ensureChoiceStarted(choiceIndex);
           await writer.write(session.finishChunk(finishReason, choiceIndex));
         }
         await writer.write(session.done());
