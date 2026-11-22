@@ -25,12 +25,12 @@ export class OpenAIProvider extends BaseProvider {
       };
 
       if (request.stream) {
-        return this.handleStream(
+        return await this.handleStream(
           client,
           params as unknown as OpenAI.Chat.ChatCompletionCreateParamsStreaming
         );
       }
-      return this.handleNonStream(
+      return await this.handleNonStream(
         client,
         params as unknown as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming
       );
