@@ -93,7 +93,10 @@ export function withTimeout<T>(
   ms: number = DEFAULT_PROVIDER_TIMEOUT_MS
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Provider timeout after ${ms}ms`)), ms);
+    const timer = setTimeout(
+      () => reject(new ProxyError(`Provider timeout after ${ms}ms`, 504, 'provider_timeout')),
+      ms
+    );
     promise.then(
       (value) => {
         clearTimeout(timer);
