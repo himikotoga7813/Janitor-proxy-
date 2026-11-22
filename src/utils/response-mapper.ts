@@ -92,16 +92,20 @@ export class StreamSession {
     functionName: string,
     choiceIndex = 0
   ): Uint8Array {
-    return this.chunk({
-      tool_calls: [
-        {
-          index,
-          id: callId,
-          type: 'function',
-          function: { name: functionName, arguments: '' },
-        },
-      ],
-    }, null, choiceIndex);
+    return this.chunk(
+      {
+        tool_calls: [
+          {
+            index,
+            id: callId,
+            type: 'function',
+            function: { name: functionName, arguments: '' },
+          },
+        ],
+      },
+      null,
+      choiceIndex
+    );
   }
 
   toolCallArgsChunk(index: number, args: string, choiceIndex = 0): Uint8Array {
@@ -112,10 +116,7 @@ export class StreamSession {
     );
   }
 
-  finishChunk(
-    reason: 'stop' | 'tool_calls' | 'length' = 'stop',
-    choiceIndex = 0
-  ): Uint8Array {
+  finishChunk(reason: 'stop' | 'tool_calls' | 'length' = 'stop', choiceIndex = 0): Uint8Array {
     return this.chunk({}, reason, choiceIndex);
   }
 

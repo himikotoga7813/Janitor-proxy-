@@ -93,12 +93,6 @@ test('completion normalization wraps reasoning in all assistant choices', () => 
     ],
   });
 
-  assert.equal(
-    normalized.choices[0].message.content,
-    '<think>\nA\n</think>\nB'
-  );
-  assert.equal(
-    normalized.choices[1].message.content,
-    '<think>\nC\n</think>\nD'
-  );
+  assert.equal(normalized.choices[0].message.content, '<think>\nA\n</think>\nB');
+  assert.equal(normalized.choices[1].message.content, '<think>\nC\n</think>\nD');
 });

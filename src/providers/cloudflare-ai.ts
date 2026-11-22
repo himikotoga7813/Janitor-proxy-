@@ -23,7 +23,7 @@ export class CloudflareAIProvider extends BaseProvider {
         throw new Error('Cloudflare AI binding not available');
       }
 
-            const unsupportedOptions = [
+      const unsupportedOptions = [
         'response_format',
         'seed',
         'logprobs',
@@ -33,9 +33,7 @@ export class CloudflareAIProvider extends BaseProvider {
         'reasoning_effort',
         'verbosity',
       ] as const;
-      const unsupportedOption = unsupportedOptions.find(
-        (key) => request[key] !== undefined
-      );
+      const unsupportedOption = unsupportedOptions.find((key) => request[key] !== undefined);
       if (unsupportedOption) {
         throw new ProxyError(
           `Cloudflare AI adapter does not support the "${unsupportedOption}" chat option.`,
@@ -44,7 +42,7 @@ export class CloudflareAIProvider extends BaseProvider {
         );
       }
 
-const messages = this.convertMessages(request.messages);
+      const messages = this.convertMessages(request.messages);
 
       // Forward common OpenAI-compatible generation and tool options.
       const params: Record<string, unknown> = {
@@ -160,9 +158,7 @@ const messages = this.convertMessages(request.messages);
       const ensureChoiceStarted = async (choiceIndex: number): Promise<void> => {
         if (startedChoices.has(choiceIndex)) return;
         startedChoices.add(choiceIndex);
-        await writer.write(
-          session.chunk({ role: 'assistant', content: '' }, null, choiceIndex)
-        );
+        await writer.write(session.chunk({ role: 'assistant', content: '' }, null, choiceIndex));
       };
       let pending = '';
       let sawSse = false;
@@ -228,15 +224,11 @@ const messages = this.convertMessages(request.messages);
             );
             if (reasoning) {
               await ensureChoiceStarted(index);
-              await writer.write(
-                session.textChunk(formatter.pushReasoning(reasoning), index)
-              );
+              await writer.write(session.textChunk(formatter.pushReasoning(reasoning), index));
             }
             if (typeof delta.content === 'string' && delta.content.length > 0) {
               await ensureChoiceStarted(index);
-              await writer.write(
-                session.textChunk(formatter.pushContent(delta.content), index)
-              );
+              await writer.write(session.textChunk(formatter.pushContent(delta.content), index));
             }
 
             if (choice?.finish_reason) {
@@ -281,9 +273,7 @@ const messages = this.convertMessages(request.messages);
                 const argumentsDelta: string = typeof fn.arguments === 'string' ? fn.arguments : '';
                 if (argumentsDelta.length > 0) {
                   await ensureChoiceStarted(index);
-                  await writer.write(
-                    session.toolCallArgsChunk(callIndex, argumentsDelta, index)
-                  );
+                  await writer.write(session.toolCallArgsChunk(callIndex, argumentsDelta, index));
                 }
               }
             }

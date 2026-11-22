@@ -76,9 +76,7 @@ export class GoogleProvider extends BaseProvider {
         'reasoning_effort',
         'verbosity',
       ] as const;
-      const unsupportedOption = unsupportedOptions.find(
-        (key) => request[key] !== undefined
-      );
+      const unsupportedOption = unsupportedOptions.find((key) => request[key] !== undefined);
       if (unsupportedOption) {
         throw new ProxyError(
           `Google provider does not support the "${unsupportedOption}" chat option through this adapter.`,
@@ -129,9 +127,7 @@ export class GoogleProvider extends BaseProvider {
           request.response_format.json_schema &&
           typeof request.response_format.json_schema === 'object'
         ) {
-          const schema = (
-            request.response_format.json_schema as Record<string, unknown>
-          ).schema;
+          const schema = (request.response_format.json_schema as Record<string, unknown>).schema;
           if (!schema || typeof schema !== 'object') {
             throw new ProxyError(
               'Google json_schema response_format requires a schema object.',
@@ -447,9 +443,7 @@ export class GoogleProvider extends BaseProvider {
         if (parts.length > 0) contents.push({ role: 'model', parts });
       } else if (msg.role === 'tool' || msg.role === 'function') {
         const functionName =
-          msg.role === 'function'
-            ? msg.name
-            : toolCallNameMap.get(msg.tool_call_id || '');
+          msg.role === 'function' ? msg.name : toolCallNameMap.get(msg.tool_call_id || '');
         const toolContent =
           typeof msg.content === 'string'
             ? msg.content || ''

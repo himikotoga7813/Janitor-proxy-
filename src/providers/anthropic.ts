@@ -16,7 +16,7 @@ export class AnthropicProvider extends BaseProvider {
           'unsupported_candidate_count'
         );
       }
-            const unsupportedOptions = [
+      const unsupportedOptions = [
         'frequency_penalty',
         'presence_penalty',
         'response_format',
@@ -29,9 +29,7 @@ export class AnthropicProvider extends BaseProvider {
         'verbosity',
         'user',
       ] as const;
-      const unsupportedOption = unsupportedOptions.find(
-        (key) => request[key] !== undefined
-      );
+      const unsupportedOption = unsupportedOptions.find((key) => request[key] !== undefined);
       if (unsupportedOption) {
         throw new ProxyError(
           `Anthropic provider does not support the "${unsupportedOption}" chat option.`,
@@ -40,7 +38,7 @@ export class AnthropicProvider extends BaseProvider {
         );
       }
 
-const clientOpts: Record<string, unknown> = { apiKey };
+      const clientOpts: Record<string, unknown> = { apiKey };
       if (this.baseUrl) clientOpts.baseURL = this.baseUrl;
       const client = new Anthropic(clientOpts);
 
@@ -309,16 +307,18 @@ const clientOpts: Record<string, unknown> = { apiKey };
           typeof msg.content === 'string'
             ? msg.content
             : msg.content
-              ? msg.content.map((part) => {
-                  if (part.type !== 'text') {
-                    throw new ProxyError(
-                      'Anthropic system messages support text content only.',
-                      501,
-                      'unsupported_content_part'
-                    );
-                  }
-                  return part.text;
-                }).join(' ')
+              ? msg.content
+                  .map((part) => {
+                    if (part.type !== 'text') {
+                      throw new ProxyError(
+                        'Anthropic system messages support text content only.',
+                        501,
+                        'unsupported_content_part'
+                      );
+                    }
+                    return part.text;
+                  })
+                  .join(' ')
               : '';
         if (text) systemParts.push(text);
       } else if (msg.role === 'user' || msg.role === 'assistant') {
@@ -408,7 +408,10 @@ const clientOpts: Record<string, unknown> = { apiKey };
               : '';
 
         if (msg.role === 'function') {
-          convertedMessages.push({ role: 'user', content: `Function ${msg.name} result: ${toolContent}` });
+          convertedMessages.push({
+            role: 'user',
+            content: `Function ${msg.name} result: ${toolContent}`,
+          });
         } else if (msg.tool_call_id) {
           convertedMessages.push({
             role: 'user',
@@ -421,7 +424,11 @@ const clientOpts: Record<string, unknown> = { apiKey };
             ],
           });
         } else {
-          throw new ProxyError('Anthropic tool messages require tool_call_id.', 400, 'invalid_tool_result');
+          throw new ProxyError(
+            'Anthropic tool messages require tool_call_id.',
+            400,
+            'invalid_tool_result'
+          );
         }
       }
     }

@@ -25,7 +25,9 @@ export abstract class BaseProvider implements AIProvider {
     const message =
       error instanceof Error
         ? error.message
-        : error && typeof error === 'object' && 'message' in error &&
+        : error &&
+            typeof error === 'object' &&
+            'message' in error &&
             typeof (error as { message?: unknown }).message === 'string'
           ? (error as { message: string }).message
           : typeof error === 'string'

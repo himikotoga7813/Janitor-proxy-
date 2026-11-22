@@ -81,7 +81,10 @@ export default {
 
       throw new ProxyError('Not found', 404, 'not_found');
     } catch (error) {
-      console.error('[Worker] Request failed:', error instanceof Error ? error.message : 'Unknown error');
+      console.error(
+        '[Worker] Request failed:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
       const errorResponse = createErrorResponse(error);
       const headers = new Headers(errorResponse.headers);
       for (const [key, value] of Object.entries(CORS_HEADERS)) {
@@ -299,7 +302,11 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
       throw new ProxyError(`Invalid message at index ${index}`, 400, 'invalid_request');
     }
     const record = message as Record<string, unknown>;
-    if (!['system', 'developer', 'user', 'assistant', 'tool', 'function'].includes(String(record.role))) {
+    if (
+      !['system', 'developer', 'user', 'assistant', 'tool', 'function'].includes(
+        String(record.role)
+      )
+    ) {
       throw new ProxyError(`Invalid role in message at index ${index}`, 400, 'invalid_request');
     }
     const content = record.content;
@@ -322,10 +329,7 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
           );
         }
         const partRecord = part as Record<string, unknown>;
-        if (
-          partRecord.type === 'text' &&
-          typeof partRecord.text === 'string'
-        ) {
+        if (partRecord.type === 'text' && typeof partRecord.text === 'string') {
           continue;
         }
         if (
@@ -345,11 +349,18 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
     }
     if (record.tool_calls !== undefined) {
       if (!Array.isArray(record.tool_calls)) {
-        throw new ProxyError(`tool_calls must be an array at message ${index}`, 400, 'invalid_request');
+        throw new ProxyError(
+          `tool_calls must be an array at message ${index}`,
+          400,
+          'invalid_request'
+        );
       }
       for (let callIndex = 0; callIndex < record.tool_calls.length; callIndex++) {
         const call = record.tool_calls[callIndex] as Record<string, unknown> | null;
-        const fn = call && typeof call === 'object' ? call.function as Record<string, unknown> | null : null;
+        const fn =
+          call && typeof call === 'object'
+            ? (call.function as Record<string, unknown> | null)
+            : null;
         if (
           !call ||
           typeof call !== 'object' ||
@@ -371,10 +382,18 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
       }
     }
     if (record.role === 'tool' && typeof record.tool_call_id !== 'string') {
-      throw new ProxyError(`Tool message at index ${index} requires tool_call_id`, 400, 'invalid_request');
+      throw new ProxyError(
+        `Tool message at index ${index} requires tool_call_id`,
+        400,
+        'invalid_request'
+      );
     }
     if (record.role === 'function' && typeof record.name !== 'string') {
-      throw new ProxyError(`Function message at index ${index} requires name`, 400, 'invalid_request');
+      throw new ProxyError(
+        `Function message at index ${index} requires name`,
+        400,
+        'invalid_request'
+      );
     }
   }
 
@@ -423,7 +442,10 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
   if (body.stream !== undefined && typeof body.stream !== 'boolean') {
     throw new ProxyError('stream must be a boolean', 400, 'invalid_request');
   }
-  if (body.top_k !== undefined && (typeof body.top_k !== 'number' || !Number.isFinite(body.top_k))) {
+  if (
+    body.top_k !== undefined &&
+    (typeof body.top_k !== 'number' || !Number.isFinite(body.top_k))
+  ) {
     throw new ProxyError('top_k must be a finite number', 400, 'invalid_request');
   }
   if (
@@ -439,7 +461,8 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
     }
     for (let index = 0; index < body.tools.length; index++) {
       const tool = body.tools[index];
-      const fn = tool && typeof tool === 'object' ? (tool as Record<string, unknown>).function : null;
+      const fn =
+        tool && typeof tool === 'object' ? (tool as Record<string, unknown>).function : null;
       if (
         !tool ||
         typeof tool !== 'object' ||
@@ -452,8 +475,15 @@ function validateOpenAIRequest(value: unknown): OpenAIChatRequest {
         throw new ProxyError(`Invalid function tool at index ${index}`, 400, 'invalid_request');
       }
       const parameters = (fn as Record<string, unknown>).parameters;
-      if (parameters !== undefined && (!parameters || typeof parameters !== 'object' || Array.isArray(parameters))) {
-        throw new ProxyError(`Tool parameters at index ${index} must be an object schema`, 400, 'invalid_request');
+      if (
+        parameters !== undefined &&
+        (!parameters || typeof parameters !== 'object' || Array.isArray(parameters))
+      ) {
+        throw new ProxyError(
+          `Tool parameters at index ${index} must be an object schema`,
+          400,
+          'invalid_request'
+        );
       }
     }
   }
@@ -561,11 +591,7 @@ function validateAnthropicRequest(value: unknown): AnthropicRequest {
       fieldValue !== undefined &&
       (typeof fieldValue !== 'number' || !Number.isFinite(fieldValue))
     ) {
-      throw new ProxyError(
-        `Anthropic ${field} must be a finite number.`,
-        400,
-        'invalid_request'
-      );
+      throw new ProxyError(`Anthropic ${field} must be a finite number.`, 400, 'invalid_request');
     }
   }
   if (
@@ -588,7 +614,11 @@ function validateAnthropicRequest(value: unknown): AnthropicRequest {
         (item) => typeof item === 'string'
       )
     ) {
-      throw new ProxyError('Anthropic metadata must be an object of string values.', 400, 'invalid_request');
+      throw new ProxyError(
+        'Anthropic metadata must be an object of string values.',
+        400,
+        'invalid_request'
+      );
     }
   }
   if (body.tools !== undefined) {
@@ -616,8 +646,7 @@ function validateAnthropicRequest(value: unknown): AnthropicRequest {
       !choice ||
       typeof choice !== 'object' ||
       !['auto', 'any', 'tool'].includes(String(choice.type)) ||
-      (choice.type === 'tool' &&
-        (typeof choice.name !== 'string' || !choice.name))
+      (choice.type === 'tool' && (typeof choice.name !== 'string' || !choice.name))
     ) {
       throw new ProxyError('Anthropic tool_choice has an invalid value.', 400, 'invalid_request');
     }

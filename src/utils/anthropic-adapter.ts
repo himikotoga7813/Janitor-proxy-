@@ -12,12 +12,20 @@ import {
 function convertAnthropicImage(block: AnthropicContentBlock): ContentPart {
   const source = block.source;
   if (!source) {
-    throw new ProxyError('Anthropic image block is missing its source.', 400, 'invalid_image_block');
+    throw new ProxyError(
+      'Anthropic image block is missing its source.',
+      400,
+      'invalid_image_block'
+    );
   }
 
   if (source.type === 'base64') {
     if (!source.data || !source.media_type) {
-      throw new ProxyError('Anthropic base64 image source is incomplete.', 400, 'invalid_image_block');
+      throw new ProxyError(
+        'Anthropic base64 image source is incomplete.',
+        400,
+        'invalid_image_block'
+      );
     }
     return {
       type: 'image_url',
@@ -50,7 +58,11 @@ function convertAnthropicToolResult(
   for (const block of value) {
     if (block.type === 'text') {
       if (typeof block.text !== 'string') {
-        throw new ProxyError('Anthropic tool result contains an invalid text block.', 400, 'invalid_tool_result');
+        throw new ProxyError(
+          'Anthropic tool result contains an invalid text block.',
+          400,
+          'invalid_tool_result'
+        );
       }
       parts.push({ type: 'text', text: block.text });
     } else if (block.type === 'image') {
@@ -106,10 +118,7 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
           );
         }
         const resultContent = convertAnthropicToolResult(block.content);
-        const prefix =
-          block.is_error === true
-            ? '[Tool returned an error]\n'
-            : '';
+        const prefix = block.is_error === true ? '[Tool returned an error]\n' : '';
         const content =
           prefix && typeof resultContent === 'string'
             ? prefix + resultContent
@@ -133,7 +142,11 @@ export function convertAnthropicRequestToOpenAI(anthropicReq: AnthropicRequest):
           block.input !== undefined &&
           (!block.input || typeof block.input !== 'object' || Array.isArray(block.input))
         ) {
-          throw new ProxyError('Anthropic tool_use input must be a JSON object.', 400, 'invalid_tool_use');
+          throw new ProxyError(
+            'Anthropic tool_use input must be a JSON object.',
+            400,
+            'invalid_tool_use'
+          );
         }
         toolCalls.push({
           id: block.id,
@@ -301,10 +314,7 @@ export class AnthropicStreamAdapter {
   private finished = false;
   private inputTokens = 0;
   private outputTokens = 0;
-  private toolCalls = new Map<
-    number,
-    { id: string; name: string; arguments: string }
-  >();
+  private toolCalls = new Map<number, { id: string; name: string; arguments: string }>();
 
   constructor(
     private model: string,
@@ -335,9 +345,7 @@ export class AnthropicStreamAdapter {
     );
   }
 
-  private startTextBlock(
-    controller: TransformStreamDefaultController<Uint8Array>
-  ): void {
+  private startTextBlock(controller: TransformStreamDefaultController<Uint8Array>): void {
     if (this.activeTextBlockIndex !== null) return;
     const index = this.blockIndex++;
     this.activeTextBlockIndex = index;
@@ -350,9 +358,7 @@ export class AnthropicStreamAdapter {
     );
   }
 
-  private stopTextBlock(
-    controller: TransformStreamDefaultController<Uint8Array>
-  ): void {
+  private stopTextBlock(controller: TransformStreamDefaultController<Uint8Array>): void {
     if (this.activeTextBlockIndex === null) return;
     controller.enqueue(
       this.encodeSSE('content_block_stop', {
@@ -367,9 +373,7 @@ export class AnthropicStreamAdapter {
    * Tool-call deltas may be interleaved in one OpenAI chunk.
    * Buffer by provider tool index so arguments never leak into another tool block.
    */
-  private emitToolBlocks(
-    controller: TransformStreamDefaultController<Uint8Array>
-  ): void {
+  private emitToolBlocks(controller: TransformStreamDefaultController<Uint8Array>): void {
     const orderedTools = [...this.toolCalls.entries()].sort(([left], [right]) => left - right);
     for (const [, tool] of orderedTools) {
       const index = this.blockIndex++;
