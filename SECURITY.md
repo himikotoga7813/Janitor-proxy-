@@ -19,7 +19,7 @@ We will respond within **48 hours**.
 
 ### For Users:
 - **Never commit API keys** to the repository
-- Store secrets in **Cloudflare Dashboard** (Workers → Settings → Variables)
+- Store `PROXY_AUTH_TOKEN` and provider API keys as encrypted **Cloudflare Worker Secrets** (Workers → Settings → Variables and Secrets)
 - Use strong **PROXY_AUTH_TOKEN** (32+ random characters)
 - Rotate tokens regularly
 - Monitor Cloudflare Workers logs for suspicious activity
@@ -35,7 +35,7 @@ We will respond within **48 hours**.
 1. **CORS**: Enabled by default for all origins
    - Can be restricted in production by modifying `src/index.ts`
    
-2. **Authentication**: Required for all endpoints except `/health`
+2. **Authentication**: Required for all endpoints except the public health check (`GET /` and `GET /health`)
    - Set `PROXY_AUTH_TOKEN` in Cloudflare Dashboard
    
 3. **API Key Storage**: 
