@@ -18,7 +18,7 @@ This is an AI gateway that runs on Cloudflare Workers. Send an OpenAI-style requ
 *   **Provider failover:** If a configured provider fails, the proxy can try another configured provider. Availability is not guaranteed.
 *   **Credential rotation:** Configured credentials can be tried in order for eligible authentication or transient failures. This does not bypass provider rate limits or quotas.
 *   **One API to Rule Them All:** Talk to Anthropic Claude 3.5, Google Gemini 2.0, and GPT-4o using the exact same code.
-*   **Stealth Configuration:** Change your routing logic via GitHub Variables without touching a single line of code.
+*   **Configuration:** Change your routing logic via GitHub Variables without editing source files.
 
 ---
 
