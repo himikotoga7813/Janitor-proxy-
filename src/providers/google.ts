@@ -93,7 +93,7 @@ export class GoogleProvider extends BaseProvider {
 
       const tools: Record<string, unknown>[] = [];
 
-      if (request.tools && request.tools.length > 0) {
+      if (request.tools && request.tools.length > 0 && request.tool_choice !== 'none') {
         tools.push({
           functionDeclarations: request.tools.map((tool) => ({
             name: tool.function.name,
@@ -307,7 +307,10 @@ export class GoogleProvider extends BaseProvider {
         await writer.write(session.finishChunk(hasToolCalls ? 'tool_calls' : 'stop'));
         await writer.write(session.done());
       } catch (error) {
-        console.error('[GoogleProvider] Stream error:', error);
+        console.error(
+          '[GoogleProvider] Stream failed:',
+          error instanceof Error ? error.message : 'Unknown stream error'
+        );
         const message = error instanceof Error ? error.message : 'Google stream failed';
         try {
           await writer.write(
