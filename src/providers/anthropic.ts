@@ -114,6 +114,7 @@ const clientOpts: Record<string, unknown> = { apiKey };
       if (request.metadata) params.metadata = request.metadata;
       if (request.tools?.length) params.tools = request.tools;
       if (request.tool_choice) params.tool_choice = request.tool_choice;
+      if (request.thinking) params.thinking = request.thinking;
 
       if (request.stream) return await this.handleNativeStream(client, params);
       return await this.handleNativeNonStream(client, params);
